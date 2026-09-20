@@ -1,0 +1,952 @@
+/*!
+	The information contained herein is the exclusive property of SONiX and
+	shall not be distributed, or disclosed in whole or in part without prior
+	permission of SONiX.
+	SONiX reserves the right to make changes without further notice to the
+	product to improve reliability, function or design. SONiX does not assume
+	any liability arising out of the application or use of any product or
+	circuits described herein. All application information is advisor and does
+	not from part of the specification.
+
+	\file		GC4653.c
+	\brief		Sensor GC4653 relation function
+	\author		BoCun
+	\version	1.0
+	\date		2022-02-18
+	\copyright	Copyright(C) 2020 SONiX Technology Co.,Ltd. All rights reserved.
+*/
+//------------------------------------------------------------------------------
+#include <stdio.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <string.h>
+#include "SEN.h"
+#include "AE_API.h"
+#include "I2C.h"
+#include "TIMER.h"
+#include "IQ_PARSER_API.h"
+#include "BSP.h"
+
+#if (SEN_USE == SEN_GC4653)
+#define TRY_COUNTS 3
+#define GainTableColSZ		(sizeof(ctGC4653_GainTable)/sizeof(ctGC4653_GainTable[0]))
+AE_EVENT_PROCESS tAE_SensorPara;
+struct SENSOR_SETTING sensor_cfg;
+tfSENObj xtSENInst;
+I2C1_Type *pI2C_type;
+SEN_STATE sensor_state;
+
+struct GC4653_GainTable {
+    uint32_t ulGainLevelTable;
+    uint8_t ubReg0x02b3;
+	uint8_t ubReg0x02b4;
+    uint8_t ubReg0x02b8;
+    uint8_t ubReg0x02b9;
+	uint8_t ubReg0x0515;
+    uint8_t ubReg0x0519;
+    uint8_t ubReg0x02d9;
+};
+
+static struct GC4653_GainTable ctGC4653_GainTable[] = {
+    {64,    0x00, 0x00, 0x01, 0x00, 0x08, 0x04, 0x42,},     //1
+    {74,    0x20, 0x00, 0x01, 0x0B, 0x08, 0x05, 0x43,},     //1.185
+    {89,    0x01, 0x00, 0x01, 0x19, 0x08, 0x04, 0x42,},     //1.4
+    {102,   0x21, 0x00, 0x01, 0x2A, 0x08, 0x05, 0x43,},     //1.659
+    {127,   0x02, 0x00, 0x02, 0x00, 0x08, 0x04, 0x42,},     //2
+    {147,   0x22, 0x00, 0x02, 0x17, 0x08, 0x05, 0x43,},     //2.37
+    {177,   0x03, 0x00, 0x02, 0x33, 0x08, 0x05, 0x43,},     //2.8
+    {203,   0x23, 0x00, 0x03, 0x14, 0x08, 0x06, 0x44,},     //3.318
+    {260,   0x04, 0x00, 0x04, 0x00, 0x08, 0x06, 0x44,},     //4
+    {300,   0x24, 0x00, 0x04, 0x2F, 0x08, 0x08, 0x46,},     //4.74
+    {361,   0x05, 0x00, 0x05, 0x26, 0x08, 0x08, 0x46,},     //5.6
+    {415,   0x25, 0x00, 0x06, 0x28, 0x08, 0x0A, 0x48,},     //6.636
+    {504,   0x06, 0x00, 0x08, 0x00, 0x08, 0x0C, 0x4A,},     //8
+    {581,   0x26, 0x00, 0x09, 0x1E, 0x08, 0x0D, 0x4B,},     //9.48
+    {722,   0x46, 0x00, 0x0B, 0x0C, 0x08, 0x0F, 0x4D,},     //11.2
+    {832,   0x66, 0x00, 0x0D, 0x11, 0x08, 0x11, 0x4F,},     //13.272
+    {1027,  0x0E, 0x00, 0x10, 0x00, 0x08, 0x13, 0x51,},     //16
+    {1182,  0x2E, 0x00, 0x12, 0x3D, 0x08, 0x16, 0x54,},     //18.96
+    {1408,  0x4E, 0x00, 0x16, 0x19, 0x08, 0x19, 0x57,},     //22.4
+    {1621,  0x6E, 0x00, 0x1A, 0x22, 0x08, 0x1B, 0x59,},     //26.544
+    {1990,  0x1E, 0x00, 0x20, 0x00, 0x08, 0x1E, 0x5C,},     //32
+    {2291,  0x3E, 0x00, 0x25, 0x3A, 0x08, 0x21, 0x5F,},     //37.92
+    {2850,  0x5E, 0x00, 0x2C, 0x33, 0x08, 0x25, 0x63,},     //44.8
+    {3282,  0x7E, 0x00, 0x35, 0x05, 0x08, 0x29, 0x67,},     //53.088
+    {4048,  0x9E, 0x00, 0x40, 0x00, 0x08, 0x2D, 0x6B,},     //64
+    {5180,  0xBE, 0x00, 0x4B, 0x35, 0x08, 0x31, 0x6F,},     //75.84
+};
+
+const uint8_t ubSEN_InitTable[] = {
+    //------------------------------
+    // Initial Table
+    //------------------------------
+    // release_V1_GC4653_MIPI_2lane_base24M_30fps
+#if (ISP_RES == ISP_FHD)
+//	0x83, 0x03, 0xfe, 0xf0,  
+//	0x83, 0x03, 0xfe, 0x00,  
+//	0x83, 0x03, 0x17, 0x00,  
+//	0x83, 0x03, 0x20, 0x77,  
+//	0x83, 0x03, 0x24, 0xc8,  
+//	0x83, 0x03, 0x25, 0x06,  
+//	0x83, 0x03, 0x26, 0x6c,  
+//	0x83, 0x03, 0x27, 0x03,  
+//	0x83, 0x03, 0x34, 0x40,  
+//	0x83, 0x03, 0x36, 0x6c,  
+//	0x83, 0x03, 0x37, 0x82,  
+//	0x83, 0x03, 0x15, 0x25,  
+//	0x83, 0x03, 0x1c, 0xc6,  
+//	0x83, 0x02, 0x87, 0x18,  
+//	0x83, 0x00, 0x84, 0x00,  
+//	0x83, 0x00, 0x87, 0x50,  
+//	0x83, 0x02, 0x9d, 0x08,  
+//	0x83, 0x02, 0x90, 0x01,  //0x00
+//	0x83, 0x03, 0x40, 0x05,  
+//	0x83, 0x03, 0x41, 0xdc,  
+//	0x83, 0x03, 0x45, 0x06,  
+//	0x83, 0x03, 0x4b, 0xb0,  
+//	0x83, 0x03, 0x51, 0x00,
+//	0x83, 0x03, 0x52, 0x08,  
+//	0x83, 0x03, 0x53, 0x02,  
+//	0x83, 0x03, 0x54, 0x38,  
+//                                 
+//	0x83, 0x03, 0x4c, 0x05,  
+//	0x83, 0x03, 0x4d, 0xa0,  
+//	0x83, 0x03, 0x4e, 0x05,  
+//	0x83, 0x03, 0x4f, 0xa0,  
+//	0x83, 0x02, 0xd1, 0xe0,  
+//	0x83, 0x02, 0x23, 0xf2,  
+//	0x83, 0x02, 0x38, 0xa4,  
+//	0x83, 0x02, 0xce, 0x7f,  
+//	0x83, 0x02, 0x32, 0xc4,  
+//	0x83, 0x02, 0xd3, 0x05,  
+//	0x83, 0x02, 0x43, 0x06,  
+//	0x83, 0x02, 0xee, 0x30,  
+//	0x83, 0x02, 0x6f, 0x70,  
+//	0x83, 0x02, 0x57, 0x09,  
+//	0x83, 0x02, 0x11, 0x02,  
+//	0x83, 0x02, 0x19, 0x09,  
+//	0x83, 0x02, 0x3f, 0x2d,  
+//	0x83, 0x05, 0x18, 0x00,  
+//	0x83, 0x05, 0x19, 0x01,  
+//	0x83, 0x05, 0x15, 0x08,  
+//	0x83, 0x02, 0xd9, 0x3f,  
+//	0x83, 0x02, 0xda, 0x02,  
+//	0x83, 0x02, 0xdb, 0xe8,  
+//	0x83, 0x02, 0xe6, 0x20,  
+//	0x83, 0x02, 0x1b, 0x10,  
+//	0x83, 0x02, 0x52, 0x22,  
+//	0x83, 0x02, 0x4e, 0x22,  
+//	0x83, 0x02, 0xc4, 0x01,  
+//	0x83, 0x02, 0x1d, 0x17,  
+//	0x83, 0x02, 0x4a, 0x01,  
+//	0x83, 0x02, 0xca, 0x02,  
+//	0x83, 0x02, 0x62, 0x10,  
+//	0x83, 0x02, 0x9a, 0x20,  
+//	0x83, 0x02, 0x1c, 0x0e,  
+//	0x83, 0x02, 0x98, 0x03,  
+//	0x83, 0x02, 0x9c, 0x00,  
+//	0x83, 0x02, 0x7e, 0x14,  
+//	0x83, 0x02, 0xc2, 0x10,  
+//	0x83, 0x05, 0x40, 0x20,  
+//	0x83, 0x05, 0x46, 0x01,  
+//	0x83, 0x05, 0x48, 0x01,  
+//	0x83, 0x05, 0x44, 0x01,  
+//	0x83, 0x02, 0x42, 0x1b,  
+//	0x83, 0x02, 0xc0, 0x1b,  
+//	0x83, 0x02, 0xc3, 0x20,  
+//	0x83, 0x02, 0xe4, 0x10,  
+//	0x83, 0x02, 0x2e, 0x00,  
+//	0x83, 0x02, 0x7b, 0x3f,  
+//	0x83, 0x02, 0x69, 0x0f,  
+//	0x83, 0x00, 0x0f, 0x00,  
+//	0x83, 0x02, 0xd2, 0x40,  
+//	0x83, 0x02, 0x7c, 0x08,  
+//	0x83, 0x02, 0x3a, 0x2e,  
+//	0x83, 0x02, 0x45, 0xce,  
+//	0x83, 0x05, 0x30, 0x20,  
+//	0x83, 0x05, 0x31, 0x02,  
+//	0x83, 0x02, 0x28, 0x50,  
+//	0x83, 0x02, 0xab, 0x00,  
+//	0x83, 0x02, 0x50, 0x00,  
+//	0x83, 0x02, 0x21, 0x50,  
+//	0x83, 0x02, 0xac, 0x00,  
+//	0x83, 0x02, 0xa5, 0x02,  
+//	0x83, 0x02, 0x60, 0x0b,  
+//	0x83, 0x02, 0x16, 0x04,  
+//	0x83, 0x02, 0x99, 0x1C,  
+//	0x83, 0x02, 0xbb, 0x0d,  
+//	0x83, 0x02, 0xa3, 0x02,  
+//	0x83, 0x02, 0xa4, 0x02,  
+//	0x83, 0x02, 0x1e, 0x02,  
+//	0x83, 0x02, 0x4f, 0x08,  
+//	0x83, 0x02, 0x8c, 0x08,  
+//	0x83, 0x05, 0x32, 0x3f,  
+//	0x83, 0x05, 0x33, 0x02,  
+//	0x83, 0x02, 0x77, 0xc0,  
+//	0x83, 0x02, 0x76, 0xc0,  
+//	0x83, 0x02, 0x39, 0xc0,  
+//	0x83, 0x02, 0x02, 0x05,  
+//	0x83, 0x02, 0x03, 0xd0,  
+//	0x83, 0x02, 0x05, 0xc0,  
+//	0x83, 0x02, 0xb0, 0x68,  
+//	0x83, 0x00, 0x02, 0xa9,  
+//	0x83, 0x00, 0x04, 0x01,  
+//	0x83, 0x00, 0x05, 0x8a,  
+//	0x83, 0x00, 0x06, 0xe0,  
+//	0x83, 0x00, 0x07, 0x65,  
+//	0x83, 0x00, 0x08, 0x66,  
+//	0x83, 0x00, 0x09, 0x56,  
+//	0x83, 0x00, 0x0a, 0x55,  
+//	0x83, 0x02, 0x1a, 0x98,  
+//	0x83, 0x02, 0x66, 0xa0,  
+//	0x83, 0x00, 0x20, 0x01,  
+//	0x83, 0x00, 0x21, 0x03,  
+//	0x83, 0x00, 0x22, 0x00,  
+//	0x83, 0x00, 0x23, 0x04,  
+//	0x83, 0x03, 0x42, 0x06,  
+//	0x83, 0x03, 0x43, 0x40,  
+//                                 
+//	0x83, 0x03, 0xfe, 0x10,  
+//	0x83, 0x03, 0xfe, 0x00,  
+//	0x83, 0x01, 0x06, 0x78,  
+//	0x83, 0x01, 0x08, 0x0c,  
+//	0x83, 0x01, 0x14, 0x01,  
+//	0x83, 0x01, 0x15, 0x12,  
+//	0x83, 0x01, 0x80, 0x46,  
+//	0x83, 0x01, 0x81, 0x30,  
+//	0x83, 0x01, 0x82, 0x05,  
+//	0x83, 0x01, 0x85, 0x01,  
+//                                 
+//	0x83, 0x03, 0xfe, 0x10,  
+//	0x83, 0x03, 0xfe, 0x00,  
+//	0x83, 0x01, 0x00, 0x09,  
+//            
+//	0x83, 0x00, 0x80, 0x02,  
+//	0x83, 0x00, 0x97, 0x0a,  
+//	0x83, 0x00, 0x98, 0x10,  
+//	0x83, 0x00, 0x99, 0x05,  
+//	0x83, 0x00, 0x9a, 0xb0,  
+//	0x83, 0x03, 0x17, 0x08,  
+//	0x83, 0x0a, 0x67, 0x80,  
+//	0x83, 0x0a, 0x70, 0x03,  
+//	0x83, 0x0a, 0x82, 0x00,  
+//	0x83, 0x0a, 0x83, 0x10,  
+//	0x83, 0x0a, 0x80, 0x2b,  
+//	0x83, 0x05, 0xbe, 0x00,  
+//	0x83, 0x05, 0xa9, 0x01,  
+//	0x83, 0x03, 0x13, 0x80,  
+//	0x83, 0x05, 0xbe, 0x01,  
+//	0x83, 0x03, 0x17, 0x00,  
+//	0x83, 0x0a, 0x67, 0x00,  
+#elif (ISP_RES == ISP_1296P)	
+	0x83, 0x03, 0xfe, 0xf0,
+	0x83, 0x03, 0xfe, 0x00,
+	0x83, 0x03, 0x17, 0x00,
+	0x83, 0x03, 0x20, 0x77,
+	0x83, 0x03, 0x24, 0xc8,
+	0x83, 0x03, 0x25, 0x06,
+	0x83, 0x03, 0x26, 0x6c,
+	0x83, 0x03, 0x27, 0x03,
+	0x83, 0x03, 0x34, 0x40,
+	0x83, 0x03, 0x36, 0x6c,
+	0x83, 0x03, 0x37, 0x82,
+	0x83, 0x03, 0x15, 0x25,
+	0x83, 0x03, 0x1c, 0xc6,
+	0x83, 0x02, 0x87, 0x18,
+	0x83, 0x00, 0x84, 0x00,
+	0x83, 0x00, 0x87, 0x50,
+	0x83, 0x02, 0x9d, 0x08,
+	0x83, 0x02, 0x90, 0x01, //0x00,
+	0x83, 0x03, 0x40, 0x05,
+	0x83, 0x03, 0x41, 0xdc,
+	0x83, 0x03, 0x45, 0x06,
+	0x83, 0x03, 0x4b, 0xb0,
+
+	0x83, 0x03, 0x52, 0x08,
+	0x83, 0x03, 0x54, 0x08,
+	0x83, 0x02, 0xd1, 0xe0,
+	0x83, 0x02, 0x23, 0xf2,
+	0x83, 0x02, 0x38, 0xa4,
+	0x83, 0x02, 0xce, 0x7f,
+	0x83, 0x02, 0x32, 0xc4,
+	0x83, 0x02, 0xd3, 0x05,
+	0x83, 0x02, 0x43, 0x06,
+	0x83, 0x02, 0xee, 0x30,
+	0x83, 0x02, 0x6f, 0x70,
+	0x83, 0x02, 0x57, 0x09,
+	0x83, 0x02, 0x11, 0x02,
+	0x83, 0x02, 0x19, 0x09,
+	0x83, 0x02, 0x3f, 0x2d,
+	0x83, 0x05, 0x18, 0x00,
+	0x83, 0x05, 0x19, 0x01,
+	0x83, 0x05, 0x15, 0x08,
+	0x83, 0x02, 0xd9, 0x3f,
+	0x83, 0x02, 0xda, 0x02,
+	0x83, 0x02, 0xdb, 0xe8,
+	0x83, 0x02, 0xe6, 0x20,
+	0x83, 0x02, 0x1b, 0x10,
+	0x83, 0x02, 0x52, 0x22,
+	0x83, 0x02, 0x4e, 0x22,
+	0x83, 0x02, 0xc4, 0x01,
+	0x83, 0x02, 0x1d, 0x17,
+	0x83, 0x02, 0x4a, 0x01,
+	0x83, 0x02, 0xca, 0x02,
+	0x83, 0x02, 0x62, 0x10,
+	0x83, 0x02, 0x9a, 0x20,
+	0x83, 0x02, 0x1c, 0x0e,
+	0x83, 0x02, 0x98, 0x03,
+	0x83, 0x02, 0x9c, 0x00,
+	0x83, 0x02, 0x7e, 0x14,
+	0x83, 0x02, 0xc2, 0x10,
+	0x83, 0x05, 0x40, 0x20,
+	0x83, 0x05, 0x46, 0x01,
+	0x83, 0x05, 0x48, 0x01,
+	0x83, 0x05, 0x44, 0x01,
+	0x83, 0x02, 0x42, 0x1b,
+	0x83, 0x02, 0xc0, 0x1b,
+	0x83, 0x02, 0xc3, 0x20,
+	0x83, 0x02, 0xe4, 0x10,
+	0x83, 0x02, 0x2e, 0x00,
+	0x83, 0x02, 0x7b, 0x3f,
+	0x83, 0x02, 0x69, 0x0f,
+	0x83, 0x02, 0xd2, 0x40,
+	0x83, 0x02, 0x7c, 0x08,
+	0x83, 0x02, 0x3a, 0x2e,
+	0x83, 0x02, 0x45, 0xce,
+	0x83, 0x05, 0x30, 0x20,
+	0x83, 0x05, 0x31, 0x02,
+	0x83, 0x02, 0x28, 0x50,
+	0x83, 0x02, 0xab, 0x00,
+	0x83, 0x02, 0x50, 0x00,
+	0x83, 0x02, 0x21, 0x50,
+	0x83, 0x02, 0xac, 0x00,
+	0x83, 0x02, 0xa5, 0x02,
+	0x83, 0x02, 0x60, 0x0b,
+	0x83, 0x02, 0x16, 0x04,
+	0x83, 0x02, 0x99, 0x1C,
+	0x83, 0x02, 0xbb, 0x0d,
+	0x83, 0x02, 0xa3, 0x02,
+	0x83, 0x02, 0xa4, 0x02,
+	0x83, 0x02, 0x1e, 0x02,
+	0x83, 0x02, 0x4f, 0x08,
+	0x83, 0x02, 0x8c, 0x08,
+	0x83, 0x05, 0x32, 0x3f,
+	0x83, 0x05, 0x33, 0x02,
+	0x83, 0x02, 0x77, 0xc0,
+	0x83, 0x02, 0x76, 0xc0,
+	0x83, 0x02, 0x39, 0xc0,
+	0x83, 0x02, 0x02, 0x05,
+	0x83, 0x02, 0x03, 0xd0,
+	0x83, 0x02, 0x05, 0xc0,
+	0x83, 0x02, 0xb0, 0x68,
+	0x83, 0x00, 0x02, 0xa9,
+	0x83, 0x00, 0x04, 0x01,
+	0x83, 0x02, 0x1a, 0x98,
+	0x83, 0x02, 0x66, 0xa0,
+	0x83, 0x00, 0x20, 0x01,
+	0x83, 0x00, 0x21, 0x03,
+	0x83, 0x00, 0x22, 0x00,
+	0x83, 0x00, 0x23, 0x04,
+	0x83, 0x03, 0x42, 0x06,
+	0x83, 0x03, 0x43, 0x40,
+	0x83, 0x03, 0xfe, 0x10,
+	0x83, 0x03, 0xfe, 0x00,
+	0x83, 0x01, 0x06, 0x78,
+	0x83, 0x01, 0x08, 0x0c,
+
+
+	0x83, 0x01, 0x14, 0x01,
+	0x83, 0x01, 0x15, 0x12,
+	0x83, 0x01, 0x80, 0x46,
+
+	0x83, 0x01, 0x81, 0x30,
+
+	0x83, 0x01, 0x82, 0x05,
+	0x83, 0x01, 0x85, 0x01,
+	0x83, 0x03, 0xfe, 0x10,
+	0x83, 0x03, 0xfe, 0x00,
+	0x83, 0x01, 0x00, 0x09,//stream on
+	0x83, 0x00, 0x0f, 0x00,
+
+
+	0x83, 0x03, 0x51, 0x00,
+	0x83, 0x03, 0x52, 0x48,
+	0x83, 0x03, 0x53, 0x00,
+	0x83, 0x03, 0x54, 0x80,
+								 
+	0x83, 0x03, 0x4c, 0x09,  
+	0x83, 0x03, 0x4d, 0x00,  
+	0x83, 0x03, 0x4e, 0x05,  
+	0x83, 0x03, 0x4f, 0x10, 
+
+	//otp
+	0x83, 0x00, 0x80, 0x02,
+	0x83, 0x00, 0x97, 0x0a,
+	0x83, 0x00, 0x98, 0x10,
+	0x83, 0x00, 0x99, 0x05,
+	0x83, 0x00, 0x9a, 0xb0,
+	0x83, 0x03, 0x17, 0x08,
+	0x83, 0x0a, 0x67, 0x80,
+	0x83, 0x0a, 0x70, 0x03,
+	0x83, 0x0a, 0x82, 0x00,
+	0x83, 0x0a, 0x83, 0x10,
+	0x83, 0x0a, 0x80, 0x2b,
+	0x83, 0x05, 0xbe, 0x00,
+	0x83, 0x05, 0xa9, 0x01,
+	0x83, 0x03, 0x13, 0x80,
+	0x83, 0x05, 0xbe, 0x01,
+	0x83, 0x03, 0x17, 0x00,
+	0x83, 0x0a, 0x67, 0x00,
+	//0x83,0x00,0x8C,0x11,
+#endif
+};
+
+//------------------------------------------------------------------------------
+bool bSEN_I2C_Read(uint16_t uwAddress, uint8_t *pValue)
+{
+	uint8_t *pAddr, pBuf[2];
+	
+	pAddr = (uint8_t*)&uwAddress;
+	pBuf[0] = pAddr[1];
+	pBuf[1] = pAddr[0];
+    return bI2C_MasterProcess (pI2C_type, SEN_SLAVE_ADDR, &pBuf[0], 2, pValue, 1);
+}
+
+//------------------------------------------------------------------------------
+bool bSEN_I2C_Write(uint8_t ubAddress1, uint8_t ubAddress2, uint8_t ubValue)
+{		
+    uint8_t ubRet = 0;
+	uint8_t pBuf[3];
+	
+	pBuf[0] = ubAddress1;
+	pBuf[1] = ubAddress2;
+	pBuf[2] = ubValue;	
+    
+    ubRet = bI2C_MasterProcess (pI2C_type, SEN_SLAVE_ADDR, &pBuf[0], 3, NULL, 0);
+    return ubRet;
+}
+
+//------------------------------------------------------------------------------
+bool bSEN_I2C_WriteTry_3004(uint16_t uwAddress, uint8_t ubValue, uint8_t ubTryCnt)
+{	
+    uint8_t pBuf[3], ret, i = 0;
+    
+    pBuf[0] = (uint8_t)((uwAddress>>8) & 0x00ff);        
+    pBuf[1] = (uwAddress & 0x00ff);
+    pBuf[2] = ubValue;
+    
+    do{
+        ret = bI2C_MasterProcess (pI2C_type, SEN_SLAVE_ADDR_3004, &pBuf[0], 3, NULL, 0);
+    }while((ret == 0) && ((i++) < ubTryCnt));
+    if(ret == 0)
+        printf("wr 0x%x fail \r\n",uwAddress);  
+    
+	return ret;
+}
+
+//------------------------------------------------------------------------------
+bool bSEN_I2C_WriteTry(uint16_t uwAddress, uint8_t ubValue, uint8_t ubTryCnt)
+{	
+    uint8_t pBuf[3], ret, i = 0;
+    
+    pBuf[0] = (uint8_t)((uwAddress>>8) & 0x00ff);        
+    pBuf[1] = (uwAddress & 0x00ff);
+    pBuf[2] = ubValue;
+    
+    do{
+        ret = bI2C_MasterProcess (pI2C_type, SEN_SLAVE_ADDR, &pBuf[0], 3, NULL, 0);
+    }while((ret == 0) && ((i++) < ubTryCnt));
+    if(ret == 0)
+        printf("wr 0x%x fail \r\n",uwAddress);  
+    
+	return ret;
+}
+
+//------------------------------------------------------------------------------
+void SEN_PclkSetting(uint8_t ubPclkIdx)
+{
+    uint16_t uwPPL;
+    uint32_t ulPCK; 
+    if(ubPclkIdx > 30)
+    {
+        ubPclkIdx = 30;
+    }
+    // set sensor struct value
+    tAE_SensorPara.ulSensorPclk = 216000000;  
+    tAE_SensorPara.ulSensorPixelPerLine = 1500;
+    tAE_SensorPara.ulSensorLinePerFrame = 4800;
+	tAE_SensorPara.ulSensorFrameRate = ubPclkIdx;     
+    tAE_SensorPara.ulMaximumSensorFrameRate = 30;    
+    //auto calculat Max Exposure
+	ulPCK = tAE_SensorPara.ulSensorPclk;
+	uwPPL = (unsigned short)(tAE_SensorPara.ulSensorPixelPerLine);
+    
+    if ((ubPclkIdx == 0) || (ubPclkIdx > 30))
+    {
+        xtSENInst.uwMaxExpLine = (ulPCK / 30 / (unsigned int)uwPPL);
+    }else{
+        xtSENInst.uwMaxExpLine = (ulPCK / tAE_SensorPara.ulSensorFrameRate / (unsigned int)uwPPL);
+    }
+    AE_EventProcess(tAE_SensorPara);
+}
+
+//------------------------------------------------------------------------------//
+//                         Power down timing selection                          //
+//------------------------------------------------------------------------------//
+//------------------------------------------------------------------------------
+void MIPI_PowerDownTimingSelect(uint8_t ubPclkIdx)
+{	
+	printf("-------------------------------\n");
+	switch (ubPclkIdx)
+	{
+        //long-packet = 164ns
+        //short-packet = 156ns
+        //T_term-pd = 156ns (by oscilloscope)
+        //DLAN_PDD_SEL = (T_term-pd / 16.67ns) = 9.358       
+		case SEN_FPS25:
+			MIPI->DLAN_PDD_LSCALE_SEL0 = 9;	
+			break;       
+		case SEN_FPS30:
+			MIPI->DLAN_PDD_LSCALE_SEL0 = 8;
+			break;
+		default:
+			MIPI->DLAN_PDD_LSCALE_SEL0 = 9;
+			break;
+	}
+	printf("[FPS=%d]PDD select:%d\n",ubPclkIdx, MIPI->DLAN_PDD_LSCALE_SEL0);
+	printf("-------------------------------\n");
+}
+
+//------------------------------------------------------------------------------//
+//                         Auto phase detection                                 //
+//------------------------------------------------------------------------------//
+//------------------------------------------------------------------------------
+uint8_t MIPI_MiddlePoint(uint32_t ulValue)
+{
+    uint8_t ubFirstZeroFlg = 0;
+    uint8_t ubBit;
+    uint8_t i;
+    uint8_t ubZeroStar[16], ubZeroEnd[16];
+    uint8_t ubZeroLength[16];
+    uint8_t ubCnt1 = 0, ubCnt2 = 0;
+    uint8_t ubMaxLength = 0;
+    uint8_t ubIdx = 0;
+    uint8_t ubMiddleValue;
+    //
+    memset(&ubZeroStar, 0, 16);
+    memset(&ubZeroEnd, 0, 16);
+    memset(&ubZeroLength, 0, 16);
+    // calculate zero area.
+    for(i=0; i<32; i++)
+    {
+        ubBit = (ulValue&(1<<i))>>i;
+        if((ubBit == 0) && (ubFirstZeroFlg == 0))
+        {
+            ubZeroStar[ubCnt1] = i;
+            ubCnt1++;
+            ubFirstZeroFlg = 1;
+        }else if((ubBit == 1) && (ubFirstZeroFlg == 1)){
+            ubZeroEnd[ubCnt2] = i-1;
+            ubCnt2++;
+            ubFirstZeroFlg = 0;
+        }
+    }
+    // select zero and longest area.
+    for(i=0; i<ubCnt1; i++)
+    {
+        ubZeroLength[i] = (ubZeroEnd[i] > ubZeroStar[i])? (ubZeroEnd[i] - ubZeroStar[i] + 1) : (31 - ubZeroStar[i] + 1);
+        
+        if(ubMaxLength > ubZeroLength[i])
+        {
+            ubMaxLength = ubMaxLength;
+        }else{
+            ubMaxLength = ubZeroLength[i];
+            ubIdx = i;
+        }
+    }
+    //
+    ubMiddleValue = (ubZeroEnd[ubIdx] > ubZeroStar[ubIdx])?
+        ((ubZeroEnd[ubIdx] + ubZeroStar[ubIdx] + 1) / 2):((31 + ubZeroStar[ubIdx] + 1) / 2);
+    
+    return ubMiddleValue;
+}
+
+//------------------------------------------------------------------------------
+void MIPI_AutoPhaseDetect(void)
+{
+    uint8_t ubClkSel;
+    uint32_t count = 0;
+    uint32_t PhaseReport0;
+    uint32_t PhaseReport1;
+
+    //Step 1, without setting CLK_SEL/DATA_LANE0_SEL/DATA_LANE1_SEL
+    MIPI->DATA_LANE0_SEL0 = 0;		MIPI->DATA_LANE0_SEL1 = 0;		MIPI->DATA_LANE0_SEL2 = 0;		MIPI->DATA_LANE0_SEL3 = 0;		MIPI->DATA_LANE0_SEL4 = 0;		
+    MIPI->DATA_LANE1_SEL0 = 0;		MIPI->DATA_LANE1_SEL1 = 0;		MIPI->DATA_LANE1_SEL2 = 0;		MIPI->DATA_LANE1_SEL3 = 0;		MIPI->DATA_LANE1_SEL4 = 0;	
+    MIPI->CLK_SEL0 = 0;		MIPI->CLK_SEL1 = 0;		MIPI->CLK_SEL2 = 0;		MIPI->CLK_SEL3 = 0;		MIPI->CLK_SEL4 = 0;	
+    
+    //Step 2, clear Phase ready flag.
+    MIPI->CLR_PHASE_DET_RDY = 1;
+    
+    //Step 3, Set up Phase Fail Condition.
+    MIPI->PHASE_FAIL_CONDITION = 0;
+    
+    //Step 4, Set SHRINK_1BYTE_DATA_SIZE is 0.
+    MIPI->SHRINK_1BYTE_DATA_SIZE = 0;
+    
+    //Setp 5, Set Auto Detect Condition.
+
+    MIPI->AUTO_FW_DET_TRI = 1;
+    MIPI->TRI_MODE = 1;
+    MIPI->PACKET_CNT_SIZE = 3;//31
+    MIPI->PHA_DET_EN = 1;
+    
+    //Step 6, Wait Phase detection ready.
+    while(!MIPI->PHASE_DET_RDY)
+    {
+        if(count > 5)
+        {
+            printf("Chk MIPI Err flag!\r\n");
+            break;
+        }
+        TIMER_Delay_ms(33);
+        count++;
+    }
+    printf("-------------------------------\n");
+    //Get phase detect report
+    PhaseReport0 = MIPI->PHASE_DET_REPORT0;
+    printf("PhaseReport0=0x%X\n",PhaseReport0);
+    //Select the middle point of the longest PHASE_PASS region
+    if( PhaseReport0==0 )
+	{
+		ubClkSel = (31+1)/2;
+	}
+	else
+	{
+        ubClkSel = MIPI_MiddlePoint(PhaseReport0);
+	}
+	//Step7, Set DATA_LANE0_SEL
+	MIPI->DATA_LANE0_SEL0 = (ubClkSel & 0x01)>>0;
+	MIPI->DATA_LANE0_SEL1 = (ubClkSel & 0x02)>>1;
+	MIPI->DATA_LANE0_SEL2 = (ubClkSel & 0x04)>>2;
+	MIPI->DATA_LANE0_SEL3 = (ubClkSel & 0x08)>>3;
+	MIPI->DATA_LANE0_SEL4 = (ubClkSel & 0x10)>>4;
+    
+    //If run in 2 Lanes mode, Read PHASE_DETECT_REPORT1 as Step6 method and set DATA_LANE1_SEL.
+    PhaseReport1 = MIPI->PHASE_DET_REPORT1;
+    printf("PhaseReport1=0x%X\n",PhaseReport1);
+    if( PhaseReport1==0 )
+	{
+		ubClkSel = (31+1)/2;
+	}
+	else
+	{
+        ubClkSel = MIPI_MiddlePoint(PhaseReport1);
+	}
+	//Step7, Set DATA_LANE1_SEL
+	MIPI->DATA_LANE1_SEL0 = (ubClkSel & 0x01)>>0;
+	MIPI->DATA_LANE1_SEL1 = (ubClkSel & 0x02)>>1;
+	MIPI->DATA_LANE1_SEL2 = (ubClkSel & 0x04)>>2;
+	MIPI->DATA_LANE1_SEL3 = (ubClkSel & 0x08)>>3;
+	MIPI->DATA_LANE1_SEL4 = (ubClkSel & 0x10)>>4;
+	printf("-------------------------------\n");
+    
+    //Step8, Disable phase detection function.
+    MIPI->AUTO_FW_DET_TRI = 0;
+    MIPI->TRI_MODE = 0;
+    MIPI->PHA_DET_EN = 0;
+}
+
+//------------------------------------------------------------------------------
+void SEN_SensorHwReset(void)
+{
+    SENSOR_RST_IO_EN(1);
+    SENSOR_RESET_OUT_EN = 1;
+    SENSOR_RESET_OUT = 0;
+    SENSOR_RST_IO(0);
+    TIMER_Delay_ms(300);
+    SENSOR_RESET_OUT = 1;
+    SENSOR_RST_IO(1);
+    TIMER_Delay_ms(300);
+}
+
+//------------------------------------------------------------------------------
+uint8_t ubSEN_CheckSensorState(void)
+{
+	uint8_t     *pBuf;	
+	uint16_t 	uwPID = 0;
+
+	pBuf = (uint8_t*)&uwPID; 
+	bSEN_I2C_Read (GC4653_CHIP_ID_HIGH_ADDR, &pBuf[1]);
+	bSEN_I2C_Read (GC4653_CHIP_ID_LOW_ADDR, &pBuf[0]);
+	if (GC4653_CHIP_ID != uwPID)
+	{
+		printd(DBG_ErrorLvl, "Read chip ID fail.<0x%x 0x%x>\n", GC4653_CHIP_ID, uwPID);
+        return 0;
+	}
+
+    return 1;
+}
+
+//------------------------------------------------------------------------------
+uint8_t ubSEN_SetSensorInitTable(void)
+{
+	uint32_t 	i;	
+	I2C_SCL_SPEED_TYP tI2C_Clock = I2C_SCL_300K;
+    
+	pI2C_type = pI2C_MasterInit(I2C_2, tI2C_Clock);
+	IQ_SetI2cType(pI2C_type, tI2C_Clock);
+
+    //HW reset.
+    SEN_SensorHwReset();
+    if(ubSEN_CheckSensorState() != 1)
+        return 0;
+	for (i=0; i<sizeof(ubSEN_InitTable); i+=4)
+	{
+		if (ubSEN_InitTable[i] == 0x83)
+		{
+			bSEN_I2C_Write(ubSEN_InitTable[i+1], ubSEN_InitTable[i+2], ubSEN_InitTable[i+3]);
+		}else if (ubSEN_InitTable[i] == 0xbb){
+            TIMER_Delay_ms(((ubSEN_InitTable[i+1]<<8) + ubSEN_InitTable[i+2]));
+        }
+	}
+	return 1;
+}
+
+//------------------------------------------------------------------------------
+uint8_t ubSEN_Open(struct SENSOR_SETTING *setting)
+{
+    SEN_AeCbFunc();
+    // Set ISP clock
+    SEN_SetISPRate(4);		
+    // Set MIPI mode
+    SEN->MIPI_MODE = 1;
+    // Power down MIPI analog phy.
+    MIPI->MIPI_PD = 0;
+    // Set sensor clock
+    SEN_SetSensorRate(SENSOR_96MHz, 4);	
+    // enable sensor PCLK
+    SEN->SEN_CLK_EN = 1;
+    //Set ISP pipeline    
+    sensor_cfg.tPathType = BAYER_SENSOR_NORMAL;
+    SEN->ISP_LH_SEL = 0;
+    SEN_SenosrOutputType(sensor_cfg.tPathType);
+    
+    // change SN_SEN->RAW_REORDER to 2, start from Gr
+    SEN->RAW_REORDER = 2;
+    // set dummy line & pixel
+    SEN->DMY_DIV = 3;
+    SEN->NUM_DMY_LN = 16;
+    SEN->NUM_DMY_DSTB = 256;
+    SEN->DMY_INSERT = 1;
+    
+    //delay 1ms
+    TIMER_Delay_us(1000);
+    // Initial dummy sensor
+    if (ubSEN_SetSensorInitTable() != 1)
+    {
+        printf("GC4653_MIPI startup failed! \n\r");
+        return 0;
+    }
+    TIMER_Delay_us(1000);
+    
+    // Enable MIPI and set MIPI channel select.
+#if (ISP_RES == ISP_FHD)
+//  SEN_MIPIControl(MIPI_1LANE, MIPI_CHANNEL0);    
+#elif (ISP_RES == ISP_1296P)
+	SEN_MIPIControl(MIPI_2LANE, MIPI_CHANNEL0);
+#endif	
+	MIPI_PowerDownTimingSelect(SEN_FPS30);
+	MIPI_AutoPhaseDetect();
+    SEN_PclkSetting(SEN_FPS30);
+
+    // clear all debug flag
+    SEN->REG_0x1300 = 0x1ff;
+    SEN->REG_0x1304 = 0x3;
+    MIPI->REG_0x1804 = 0xff;
+    MIPI->REG_0x1814 = 0x1f0000;
+    // Unable write to dram.
+    SEN->IMG_TX_EN = 0;        
+    // enable interrupt
+    SEN->HW_END_INT_EN = 1;
+    SEN->SEN_VSYNC_INT_EN = 1;
+    SEN->SEN_HSYNC_INT_EN = 1;
+    
+    return 1;
+}
+
+//------------------------------------------------------------------------------
+uint16_t uwSEN_CalExpLine(uint32_t ulAlgExpTime)
+{
+    return (ulSEN_GetPixClk() / 1000000L * (uint32_t)ulAlgExpTime / (uint32_t)ulSEN_GetPckPerLine() / 10);
+}
+
+//------------------------------------------------------------------------------
+void SEN_CalExpLDmyL(uint32_t ulAlgExpTime)
+{
+	//Transfor the ExpLine of Algorithm	to ExpLine and DmyLine of Sensor here
+	xtSENInst.xtSENCtl.ulExpTime = ulAlgExpTime;
+	xtSENInst.xtSENCtl.uwExpLine = uwSEN_CalExpLine(ulAlgExpTime);
+
+	if(xtSENInst.xtSENCtl.uwExpLine < 1)
+	{
+		xtSENInst.xtSENCtl.uwExpLine = 1;
+	}	
+        
+	//Calculate Dummy line
+    if(xtSENInst.xtSENCtl.uwExpLine <= xtSENInst.uwMaxExpLine)
+	{
+        xtSENInst.xtSENCtl.uwDmyLine = xtSENInst.uwMaxExpLine;
+	}
+	else
+	{
+        xtSENInst.xtSENCtl.uwDmyLine =xtSENInst.xtSENCtl.uwExpLine;
+	}
+}
+
+//------------------------------------------------------------------------------
+uint32_t ulSEN_GetPixClk(void)
+{
+	return (tAE_SensorPara.ulSensorPclk);
+}
+
+//------------------------------------------------------------------------------
+uint32_t ulSEN_GetPckPerLine(void)
+{
+	return (tAE_SensorPara.ulSensorPixelPerLine);
+}
+
+//------------------------------------------------------------------------------
+void SEN_WriteTotalLine(void)
+{
+
+}
+
+//------------------------------------------------------------------------------
+void SEN_SetDummyLine(void)
+{
+    SEN_WrDummyLine(xtSENInst.xtSENCtl.uwDmyLine);
+}
+
+//------------------------------------------------------------------------------
+void SEN_WrDummyLine(uint16_t uwDL)
+{   
+    bSEN_I2C_WriteTry(GC4653_FRAME_H, (uint8_t)((uwDL>>8) & 0xff), TRY_COUNTS);
+    bSEN_I2C_WriteTry(GC4653_FRAME_L, (uint8_t)(uwDL & 0xff), TRY_COUNTS);
+}
+
+//------------------------------------------------------------------------------
+void SEN_SetExpLine(void)
+{
+    SEN_WrExpLine(xtSENInst.xtSENCtl.uwExpLine);
+}
+
+//------------------------------------------------------------------------------
+void SEN_WrExpLine(uint16_t uwExpLine)
+{
+	bSEN_I2C_WriteTry(GC4653_EXP_H, (uint8_t)((uwExpLine>>8) & 0xff), TRY_COUNTS);
+	bSEN_I2C_WriteTry(GC4653_EXP_L, (uint8_t)(uwExpLine & 0xff), TRY_COUNTS);
+}
+
+//------------------------------------------------------------------------------
+void SEN_WrMaxExpLine(uint32_t ulValue)
+{
+    xtSENInst.uwMaxExpLine = ulValue;
+}
+
+//------------------------------------------------------------------------------
+void SEN_WrGain(uint32_t ulGainX1024)
+{
+    static uint32_t ulOldGainValue = 0;
+    uint32_t ulDigital_gain = 0;
+    uint8_t ubIndex, i;
+    
+    // update struct value.
+    xtSENInst.xtSENCtl.uwGain = ulGainX1024;
+    ulGainX1024 = ulGainX1024 / 16;
+	//	Set min gain is 1x gain
+	if (ulGainX1024 < 64)
+	{
+		ulGainX1024 = 64;
+	}
+    
+    if(ulGainX1024 == ulOldGainValue)
+        return;
+    for(i=0; i<GainTableColSZ; i++)
+    {
+        if((ulGainX1024 >= ctGC4653_GainTable[i].ulGainLevelTable) && (ulGainX1024 < ctGC4653_GainTable[i+1].ulGainLevelTable))
+        {
+            ubIndex = i;
+            break;
+        }
+    }
+
+    ulDigital_gain = ulGainX1024 * 64 / ctGC4653_GainTable[ubIndex].ulGainLevelTable;
+    bSEN_I2C_WriteTry(GC4653_GAIN_H, (ulDigital_gain>>6), TRY_COUNTS);
+    bSEN_I2C_WriteTry(GC4653_GAIN_L, ((ulDigital_gain&0x3f)<<2), TRY_COUNTS);  
+    bSEN_I2C_Write(0x02, 0xb3, ctGC4653_GainTable[ubIndex].ubReg0x02b3);    
+    bSEN_I2C_Write(0x02, 0xb4, ctGC4653_GainTable[ubIndex].ubReg0x02b4);
+    bSEN_I2C_Write(0x02, 0xb8, ctGC4653_GainTable[ubIndex].ubReg0x02b8);
+    bSEN_I2C_Write(0x02, 0xb9, ctGC4653_GainTable[ubIndex].ubReg0x02b9);
+    bSEN_I2C_Write(0x05, 0x15, ctGC4653_GainTable[ubIndex].ubReg0x0515);
+    bSEN_I2C_Write(0x05, 0x19, ctGC4653_GainTable[ubIndex].ubReg0x0519);
+    bSEN_I2C_Write(0x02, 0xd9, ctGC4653_GainTable[ubIndex].ubReg0x02d9);
+    
+    // save gain value    
+    ulOldGainValue = ulGainX1024;
+}
+
+//------------------------------------------------------------------------------
+void SEN_SetMirrorFlip(uint8_t ubMirrorEn, uint8_t ubFlipEn)
+{
+
+}
+
+//------------------------------------------------------------------------------
+void SEN_GroupHoldOnVSync(void)
+{
+
+}
+
+//------------------------------------------------------------------------------
+void SEN_GroupHoldOffVSync(void)
+{
+
+}
+
+//------------------------------------------------------------------------------
+void SEN_ChgDisplayMode(uint8_t ubIdx)
+{
+//    ubIdx = (ubIdx >= 6)? 6:ubIdx;
+//    bSEN_I2C_WriteTry_3004(GL3004_DISPLAY_MODE, ubIdx, TRY_COUNTS);
+}
+
+//------------------------------------------------------------------------------
+void SEN_SetSensorImageSize(void)
+{
+    // Image for ISP
+    sensor_cfg.xtSENWin.uwHSize = ISP_WIDTH;
+    sensor_cfg.xtSENWin.uwVSize = ISP_HEIGHT;
+    sensor_cfg.xtSENWin.uwHStart = 0;
+    sensor_cfg.xtSENWin.uwVStart = 0;	
+}
+
+//------------------------------------------------------------------------------
+void SEN_SetSensorType(void)
+{
+    sensor_cfg.ubSensorType = SEN_GC4653;    
+    printd(DBG_Debug1Lvl, "sensor type is GC4653 MIPI\n");
+}
+
+//------------------------------------------------------------------------------
+void SEN_AeCbFunc(void)
+{
+    tAE_RegXuCbFunc(AE_OPC_GROUP_HOLD_ON, SEN_GroupHoldOnVSync);
+    tAE_RegXuCbFunc(AE_OPC_GROUP_HOLD_OFF, SEN_GroupHoldOffVSync);
+    tAE_RegXuCbFunc(AE_OPC_DUMMY_LINE, SEN_SetDummyLine);
+    tAE_RegXuCbFunc(AE_OPC_EXP_LINE, SEN_SetExpLine);
+    tAE_RegXu2CbFunc(AE_OPC2_GAIN, SEN_WrGain);
+    tAE_RegXu2CbFunc(AE_OPC2_CAL_EXP_DUM, SEN_CalExpLDmyL);
+    tAE_RegXu2CbFunc(AE_OPC2_MAX_EXP_LINE, SEN_WrMaxExpLine);
+    AE_CalExpLineCbFunc(uwSEN_CalExpLine);
+}
+#endif

@@ -1,0 +1,10 @@
+#ifndef _UI_BUCCU_SUBSUBSUBSUBMENU_H_
+#define _UI_BUCCU_SUBSUBSUBSUBMENU_H_
+
+#include "UI_BUCCU[WSVGA].h"
+
+#include "UI_BUCCU[WSVGA]_SUBSUBSUBMENU.h"
+
+
+#endif
+

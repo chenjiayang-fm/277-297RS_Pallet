@@ -1,0 +1,64 @@
+#! armcc -E -I SRC\APP,SRC\Boards,..\..\510PF_SDK\SDK_BUC\SRC\APP,..\..\510PF_SDK\SDK_BUC\SRC\Boards
+#define BUC_CU
+#define S2019A
+;------------------------------------------------------------------------------
+#include "APP_CFG_SEL.h"
+;------------------------------------------------------------------------------
+; MMU TLB Size
+#define SCT_TLB_SIZE 			(0x00004000)
+; AEC Data Size
+#define SCT_AEC_DATA_SIZE 		(0x0002F000)
+; FWU Data Size
+#define SCT_FWU_DATA_SIZE 		(0x00025000)
+; Un-Cache Heap Size
+#define SCT_UNCACHE_HEAP_SIZE 	(0x00040000)
+
+;------------------------------------------------------------------------------
+; I-Cache Address
+#define SCT_ICACHE_ADDR 		(0x00000000)
+
+;------------------------------------------------------------------------------
+; Alignment
+#define SCT_CACHE_ALIGN 		(0x00020000)
+;#define SCT_UNCACHE_HEAP_ALIGN	(0x00001000)
+#define SCT_BUF_ALIGN			(0x00000400)
+#define SCT_CACHE_HEAP_ALIGN	(0x00000008)
+
+;------------------------------------------------------------------------------
+LR_IROM1 SCT_ICACHE_ADDR CODE_MAX_SIZE  
+{ ; load region size_region
+  ; I-Cache
+  ER_IROM1 SCT_ICACHE_ADDR CODE_MAX_SIZE  
+  {  ; load address = execution address
+   *(.ARM.__at_0x00006000)
+   *(.ARM.__at_0x00006400)
+   *.o (RESET, +First)
+   *(InRoot$$Sections)
+   .ANY (+RO)
+  }
+  
+  ; D-Cache
+  MMU_TT AlignExpr(ImageLimit(ER_IROM1) + ImageLimit(ER_IROM1) / 17, SCT_CACHE_ALIGN) EMPTY SCT_TLB_SIZE 
+  {  ; TLB
+  }
+  RW_IRAM1 +0 DATA_MAX_SIZE
+  {  ; RW data   
+   .ANY (+RW +ZI)
+  }
+  RW_CACHED_HEAP AlignExpr(ImageLimit(RW_IRAM1), SCT_CACHE_HEAP_ALIGN) EMPTY osHeapSize  
+  {  ; Cache Heap
+  }    
+  
+  ; Un-Cache
+  RW_UNCACHED_HEAP AlignExpr(ImageLimit(RW_CACHED_HEAP), SCT_CACHE_ALIGN) EMPTY SCT_UNCACHE_HEAP_SIZE 
+  {  ; UnCache Heap
+  }
+  RW_IRAM2 +0 SCT_FWU_DATA_SIZE  
+  {  ; FWU RW data
+   FWU.o (+RW +ZI)
+   FWU_FS.o (+RW +ZI)
+  }  
+  RW_IRAM3 AlignExpr(ImageLimit(RW_IRAM2), SCT_BUF_ALIGN) EMPTY 0	
+  {  ; Data Buf
+  }  
+}

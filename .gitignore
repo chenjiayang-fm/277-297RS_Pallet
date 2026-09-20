@@ -1,0 +1,79 @@
+# Compiler and linker output
+*.o
+*.obj
+*.d
+*.crf
+*.dep
+*.axf
+*.elf
+*.lnp
+*.map
+*.lst
+*.plg
+*.tra
+*.__i
+*._ia
+*.iex
+*.build_log.htm
+/SDK_BUC/LST/
+/SDK_BUC/BIN/*.htm
+
+# Generated firmware; keep binary inputs required by Merge.bat
+/SDK_BUC/BIN/*.bin
+/SDK_BUC/BIN/*.hex
+!/SDK_BUC/BIN/Boot_Hook.bin
+!/SDK_BUC/BIN/ISPMemDrive.bin
+!/SDK_BUC/BIN/sFWU.bin
+/SDK_BUC/CONFIG/Header.hex
+/SDK_BUC/SYSTEM/OSD/temp1.bin
+/FIRMWARE*.bin
+/SNCC7XFW.bin
+/ST-HDW297RS-*.bin
+
+# ConfigGen temporary images, output and debug symbols
+/510PF_ConfigGen_v20170713a/Temporal/
+/510PF_ConfigGen_v20170713a/FIRMWARE*.bin
+/510PF_ConfigGen_v20170713a/out_adpcm.bin
+/510PF_ConfigGen_v20170713a/ConfigGen.tds
+/510PF_ConfigGen_v20170713a/file.txt
+
+# Keil local window state; keep .uvproj/.uvopt and linker scripts
+*.uvgui.*
+*.uvguix.*
+
+# Visual Studio build output and local state
+.vs/
+ipch/
+[Dd]ebug/
+[Rr]elease/
+*.suo
+*.vcproj.user
+*.vcxproj.user
+*.ncb
+*.sdf
+*.opensdf
+*.VC.db
+*.VC.VC.opendb
+*.pdb
+*.idb
+*.ilk
+*.tlog
+
+# Logs, editor temporary files and backups
+*.log
+JLinkLog*.txt
+/SDK_BUC/a.txt
+*.bak
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# OS metadata and local shortcuts
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.lnk
+
+# Keep prebuilt .lib/.a, tool .exe/.dll, and resource .bin/.dat files.

@@ -1,0 +1,82 @@
+/*!
+	The information contained herein is the exclusive property of SONiX and
+	shall not be distributed, or disclosed in whole or in part without prior
+	permission of SONiX.
+	SONiX reserves the right to make changes without further notice to the
+	product to improve reliability, function or design. SONiX does not assume
+	any liability arising out of the application or use of any product or
+	circuits described herein. All application information is advisor and does
+	not from part of the specification.
+
+	\file		OSD1Image_Table.h
+	\brief		OSD1 Image Table
+	\author		Hanyi Chiu
+	\version	1
+	\date		2016/09/20
+	\copyright	Copyright (C) 2016 SONiX Technology Co., Ltd. All rights reserved.
+*/
+//------------------------------------------------------------------------------
+
+//!           Index 	  	  		  SF Address     Pos X     Pos Y
+OSD1IMGPOOL(OSD1IMAGE,        			0,        	   0,        0)
+OSD1IMGPOOL(SUBMENU2,					0x2000, 	   0,		 0)
+OSD1IMGPOOL(FWUSTARTBG, 				0x2000,        0,      620)
+OSD1IMGPOOL(POWER_DISCONNECT, 			0x2000, 	   0,	   620)
+OSD1IMGPOOL(POWER_CONNECT, 				0x2000, 	   0,	   620)
+OSD1IMGPOOL(RESET_LOGO,					0x2000, 	   0,	   620)
+//OSD1IMGPOOL(BSD_RANGE_SINGLE,					0x2000, 	   0,	   620)
+//OSD1IMGPOOL(BSD_RANGE_DUAL,					0x2000, 	   0,	   620)
+//OSD1IMGPOOL(BSD_RANGE_QUAD,					0x2000, 	   0,	   620)
+OSD1IMGPOOL(BSD_RANGE_DOTS_RED,					0x2000, 	   0,	   620)
+OSD1IMGPOOL(BSD_RANGE_DOTS_YELLOW,					0x2000, 	   0,	   620)
+OSD1IMGPOOL(BSD_RANGE_DOTS_GREEN,					0x2000, 	   0,	   620)
+OSD1IMGPOOL(PARKINGLINE_LEFT, 			0x3000, 	   310, 		 0)
+OSD1IMGPOOL(PARKINGLINE_RIGHT,			0x3000, 	   310, 		 0)
+//OSD1IMGPOOL(PARKINGLINE_LEFT_DUAL, 			0x3000, 	   310, 		 0)
+//OSD1IMGPOOL(PARKINGLINE_RIGHT_DUAL,			0x3000, 	   310, 		 0)
+//OSD1IMGPOOL(PARKINGLINE_LEFT_QUAL, 			0x3000, 	   310, 		 0)
+//OSD1IMGPOOL(PARKINGLINE_RIGHT_QUAL,			0x3000, 	   310, 		 0)
+
+
+OSD1IMGPOOL(PARKINGLINE_UPPER1,			0x3000, 	   310, 		 0)
+OSD1IMGPOOL(PARKINGLINE_UPPER2,			0x3000, 	   310, 		 0)
+OSD1IMGPOOL(PARKINGLINE_UPPER3,			0x3000, 	   310, 		 0)
+OSD1IMGPOOL(PARKINGLINE_UPPER4,			0x3000, 	   310, 		 0)
+OSD1IMGPOOL(PARKINGLINE_UPPER5,			0x3000, 	   310, 		 0)
+OSD1IMGPOOL(PARKINGLINE_UPPER6,			0x3000, 	   310, 		 0)
+OSD1IMGPOOL(PARKINGLINE_UPPER7,			0x3000, 	   310, 		 0)
+OSD1IMGPOOL(PARKINGLINE_UPPER8,			0x3000, 	   310, 		 0)
+OSD1IMGPOOL(PARKINGLINE_UPPER9, 		0x3000, 	   310, 		 0)
+OSD1IMGPOOL(PARKINGLINE_UPPER10, 		0x3000, 	   310, 		 0)
+OSD1IMGPOOL(PARKINGLINE_UPPER11, 		0x3000, 	   310, 		 0)
+OSD1IMGPOOL(PARKINGLINE_UPPER12, 		0x3000, 	   310, 		 0)
+
+OSD1IMGPOOL(PARKINGLINE_LOWER1, 		0x3000, 	   310, 		 0)
+OSD1IMGPOOL(PARKINGLINE_LOWER2, 		0x3000, 	   310, 		 0)
+OSD1IMGPOOL(PARKINGLINE_LOWER3, 		0x3000, 	   310, 		 0)
+OSD1IMGPOOL(PARKINGLINE_LOWER4, 		0x3000, 	   310, 		 0)
+OSD1IMGPOOL(PARKINGLINE_LOWER5, 		0x3000, 	   310, 		 0)
+OSD1IMGPOOL(PARKINGLINE_LOWER6, 		0x3000, 	   310, 		 0)
+OSD1IMGPOOL(PARKINGLINE_LOWER7, 		0x3000, 	   310, 		 0)
+OSD1IMGPOOL(PARKINGLINE_LOWER8, 		0x3000, 	   310, 		 0)
+OSD1IMGPOOL(PARKINGLINE_LOWER9, 		0x3000, 	   310, 		 0)
+OSD1IMGPOOL(PARKINGLINE_LOWER10,		0x3000, 	   310, 		 0)
+OSD1IMGPOOL(PARKINGLINE_LOWER11,		0x3000, 	   310, 		 0)
+OSD1IMGPOOL(PARKINGLINE_LOWER12,		0x3000, 	   310, 		 0)
+
+//OSD1IMGPOOL(PARKINGLINE_MID1, 		0x3000, 	   310, 		 0)
+//OSD1IMGPOOL(PARKINGLINE_MID2, 		0x3000, 	   310, 		 0)
+//OSD1IMGPOOL(PARKINGLINE_MID3, 		0x3000, 	   310, 		 0)
+//OSD1IMGPOOL(PARKINGLINE_MID4, 		0x3000, 	   310, 		 0)
+//OSD1IMGPOOL(PARKINGLINE_MID5, 		0x3000, 	   310, 		 0)
+//OSD1IMGPOOL(PARKINGLINE_MID6, 		0x3000, 	   310, 		 0)
+//OSD1IMGPOOL(PARKINGLINE_MID7, 		0x3000, 	   310, 		 0)
+//OSD1IMGPOOL(PARKINGLINE_MID8, 		0x3000, 	   310, 		 0)
+//OSD1IMGPOOL(PARKINGLINE_MID9, 		0x3000, 	   310, 		 0)
+//OSD1IMGPOOL(PARKINGLINE_MID10,		0x3000, 	   310, 		 0)
+//OSD1IMGPOOL(PARKINGLINE_MID11,		0x3000, 	   310, 		 0)
+//OSD1IMGPOOL(PARKINGLINE_MID12,		0x3000, 	   310, 		 0)
+OSD1IMGPOOL(DESKTOP_VOICE_MUTE,				0x3000, 	   246, 	   173)
+OSD1IMGPOOL(DESKTOP_VOICE_UNMUTE,			0x3000, 	   246, 	   173)
+
+#undef OSD1IMGPOOL
