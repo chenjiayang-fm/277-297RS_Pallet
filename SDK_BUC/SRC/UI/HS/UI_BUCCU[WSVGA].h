@@ -64,6 +64,50 @@
 //#define POINT_CHOOSE_MODE  0
 //#define POINT_MOVE_MODE    1
 //#define POINT_INDEX_MAX    8
+#define AI_PAGE_ALGORITHM      0
+#define AI_PAGE_BSD            1
+#define AI_PAGE_PALLET         2
+#define AI_ALGORITHM_COUNT     2
+#define AI_MAIN_COLUMN_COUNT   (AI_ALGORITHM_COUNT + 1)
+#define AI_BSD_SWITCH_COUNT    4
+#define AI_BSD_ITEM_COUNT      (AI_BSD_SWITCH_COUNT + 1)
+#define AI_PALLET_PARAM_COUNT  6
+#define AI_PALLET_SENSITIVITY  (AI_PALLET_PARAM_COUNT - 1)
+#define AI_PALLET_ITEM_COUNT   AI_PALLET_PARAM_COUNT
+
+#define AI_PALLET_DELAY_TURN_OFF_MIN       2
+#define AI_PALLET_DELAY_TURN_OFF_MAX       10
+#define AI_PALLET_DELAY_TURN_OFF_STEP      2
+#define AI_PALLET_FLOW_FRAME_INTERVAL_MIN  0
+#define AI_PALLET_FLOW_FRAME_INTERVAL_MAX  5
+#define AI_PALLET_FLOW_FRAME_INTERVAL_STEP 1
+#define AI_PALLET_RATE_RANGE_MIN           1
+#define AI_PALLET_RATE_RANGE_MAX           6
+#define AI_PALLET_RATE_RANGE_STEP          1
+#define AI_PALLET_FLOW_PAUSE_DURATION_MIN  0
+#define AI_PALLET_FLOW_PAUSE_DURATION_MAX  50
+#define AI_PALLET_FLOW_PAUSE_DURATION_STEP 5
+#define AI_PALLET_FLOW_RUN_DURATION_MIN    10
+#define AI_PALLET_FLOW_RUN_DURATION_MAX    30
+#define AI_PALLET_FLOW_RUN_DURATION_STEP   5
+#define AI_PALLET_SENSITIVITY_MIN          0
+#define AI_PALLET_SENSITIVITY_MAX          99
+#define AI_PALLET_SENSITIVITY_STEP         1
+
+#define AI_ALGORITHM_X          388
+#define AI_ALGORITHM_Y          154
+#define AI_ALGORITHM_X_STEP     137
+#define AI_ALGORITHM_Y_STEP     72
+#define AI_BSD_SWITCH_X         338
+#define AI_BSD_X_STEP           454
+#define AI_BSD_Y                140
+#define AI_BSD_Y_STEP           76
+#define AI_PALLET_HL_X          486
+#define AI_PALLET_HL_Y          84
+#define AI_PALLET_Y_STEP        68
+#define AI_PALLET_SLIDER_X      508
+#define AI_PALLET_SLIDER_Y      88
+
 #define AI_Config_Xpos     285
 #define AI_Config_Ypos     175
 #define AI_Config_Xstep    147
@@ -530,32 +574,34 @@ typedef enum
 
 typedef enum
 {
-//	AI_BSD_CAM1,
-//	AI_BSD_CAM2,	
-//	AI_BSD_CAM3,	
-//	AI_BSD_CAM4,
-	AI_PD_CAM1,
-	AI_PD_CAM2,	
-	AI_PD_CAM3,	
-	AI_PD_CAM4,
-	AI_CD_CAM1,
-	AI_CD_CAM2,	
-	AI_CD_CAM3,	
-	AI_CD_CAM4,
-	AI_ALARM_CAM1,
-	AI_ALARM_CAM2,	
-	AI_ALARM_CAM3,	
-	AI_ALARM_CAM4,
-	AI_TRIGGER_CAM1,
-	AI_TRIGGER_CAM2,	
-	AI_TRIGGER_CAM3,	
-	AI_TRIGGER_CAM4,
-	AI_BSDRANGE_CAM1,
-	AI_BSDRANGE_CAM2,	
-	AI_BSDRANGE_CAM3,	
-	AI_BSDRANGE_CAM4,	
+	AI_BSD_CAM1,
+	AI_BSD_CAM2,
+	AI_BSD_CAM3,
+	AI_BSD_CAM4,
+	AI_PALLET_CAM1,
+	AI_PALLET_CAM2,
+	AI_PALLET_CAM3,
+	AI_PALLET_CAM4,
+	AI_SETUP_CAM1,
+	AI_SETUP_CAM2,
+	AI_SETUP_CAM3,
+	AI_SETUP_CAM4,
 	AI_MAX,
 }UI_SubSub_AIMode_t;
+
+typedef struct
+{
+	uint8_t tDelayTurnOFF;
+	uint8_t tFlowFrameInterval;
+	uint8_t tRateRange;
+	uint8_t tFlowPauseDuration;
+	uint8_t tFlowRunDuration;
+	uint8_t tDectability;
+}UI_PalletConfigInfo_t;
+
+#define UI_AI_CONFIG_VERSION 1
+void UI_AIEnterMenu(void);
+void UI_AISetupReturn(void);
 typedef enum
 {
 	PonitUpLeft=0, 
@@ -1132,7 +1178,10 @@ typedef struct
 	uint32_t              ulFrameCount;
 	uint32_t			  ulImageStuckCount;
 	uint32_t			  ulFps;
-	uint8_t				  ubReserved[163];
+	uint8_t ubAIAlgorithm; /* 0: BSD, 1: Pallet */
+	UI_PalletConfigInfo_t tPalletConfig;
+	uint8_t ubAIConfigVersion;
+	uint8_t ubReserved[155];
 
 }UI_CamStatus_t;
 #pragma pack (1)/*指定按1字节对齐*/

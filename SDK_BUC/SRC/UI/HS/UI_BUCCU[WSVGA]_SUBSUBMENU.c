@@ -801,204 +801,193 @@ void UI_SystemSubSubMenuExecute()
 	}	
 }
 //------------------------------------------------------------------------------------
+static uint8_t ubAISetupPage = AI_PAGE_ALGORITHM;
+static uint8_t ubPalletRemoteMode = REMOTE_SELECT_ITEM;
+static UI_SubMenuItem_t tAISetupMenuItem = {0, AI_BSD_ITEM_COUNT, {0, 0}};
+// 范围数组与 Pallet 页面的六行参数顺序一致，绘制、按键和触摸共用。
+static const uint8_t ubPalletMin[AI_PALLET_PARAM_COUNT] = {AI_PALLET_DELAY_TURN_OFF_MIN,
+	AI_PALLET_RATE_RANGE_MIN, AI_PALLET_FLOW_FRAME_INTERVAL_MIN, AI_PALLET_FLOW_PAUSE_DURATION_MIN,
+	AI_PALLET_FLOW_RUN_DURATION_MIN, AI_PALLET_SENSITIVITY_MIN};
+static const uint8_t ubPalletMax[AI_PALLET_PARAM_COUNT] = {AI_PALLET_DELAY_TURN_OFF_MAX,
+	AI_PALLET_RATE_RANGE_MAX, AI_PALLET_FLOW_FRAME_INTERVAL_MAX, AI_PALLET_FLOW_PAUSE_DURATION_MAX,
+	AI_PALLET_FLOW_RUN_DURATION_MAX, AI_PALLET_SENSITIVITY_MAX};
+static const uint8_t ubPalletStep[AI_PALLET_PARAM_COUNT] = {AI_PALLET_DELAY_TURN_OFF_STEP,
+	AI_PALLET_RATE_RANGE_STEP, AI_PALLET_FLOW_FRAME_INTERVAL_STEP, AI_PALLET_FLOW_PAUSE_DURATION_STEP,
+	AI_PALLET_FLOW_RUN_DURATION_STEP, AI_PALLET_SENSITIVITY_STEP};
+
 void UI_AIDrawSubSubMenuItem(uint8_t ubDrawBox)
 {
-#if 1
-	OSD_IMG_INFO tOsdImgInfo[8];
-	uint8_t ubItemPreIdx = tSettingSubSubMenuItem.tSettingS[10].tSubMenuInfo.ubItemPreIdx;
-	uint8_t ubItemCurIdx = tSettingSubSubMenuItem.tSettingS[10].tSubMenuInfo.ubItemIdx;
-	uint8_t ubCamNumPre = ubItemPreIdx%4;
-	uint8_t ubCamNumCur = ubItemCurIdx%4;
-	uint16_t ubXpos = AI_Config_Xpos,ubYpos = AI_Config_Ypos,ubXstep = AI_Config_Xstep,ubYstep = AI_Config_Ystep;
-	printf("ubItemPreIdx=%d",ubItemPreIdx);
-	printf("ubItemCurIdx=%d",ubItemCurIdx);
-	//----------------------------pre----------------------------------------------
-	if(ubItemPreIdx != ubItemCurIdx)
+	OSD_IMG_INFO tOsdImgInfo, tSlider, tRound, tWord;
+	// 主页面索引按 BSD、Pallet、SETUP 三列分组，每列包含四个通道。
+	uint8_t ubMainIdx = tSettingSubSubMenuItem.tSettingS[AI_ITEM].tSubMenuInfo.ubItemIdx;
+	uint8_t CamIdx = ubMainIdx%CAM_4T;
+	uint8_t ubItemIdx = tAISetupMenuItem.tSubMenuInfo.ubItemIdx;
+	uint8_t i, j, ubHighlight, ubValue;
+	uint8_t ubLanguage = (tUI_CuSetting.tLanguage == LANGUAGE_FRENCH)?1:
+		(tUI_CuSetting.tLanguage == LANGUAGE_GERMAN)?2:(tUI_CuSetting.tLanguage == LANGUAGE_CHINESE)?3:0;
+	uint16_t uwImage;
+	UI_PalletConfigInfo_t *pConfig = &tUI_CamStatus[CamIdx].tPalletConfig;
+	// 滑条按页面顺序排列，Rate Range 在 Flow Frame Interval 之前。
+	uint8_t ubValues[AI_PALLET_PARAM_COUNT] = {pConfig->tDelayTurnOFF, pConfig->tRateRange,
+		pConfig->tFlowFrameInterval, pConfig->tFlowPauseDuration, pConfig->tFlowRunDuration,
+		pConfig->tDectability};
+	uint8_t ubBSDValues[AI_BSD_SWITCH_COUNT] = {tUI_CuSetting.ubDetectPeopleFlag[CamIdx],
+		tUI_CuSetting.ubDetectCarFlag[CamIdx], tUI_CuSetting.ubIsEnableBSDALARM[CamIdx],
+		tUI_CuSetting.ubBSDTriggerOut[CamIdx]};
+
+	if(ubAISetupPage == AI_PAGE_ALGORITHM)
 	{
-		//pre
-		tOSD_GetOsdImgInfor(1, OSD_IMG2,OSD2IMG_AI_OFF_NOR , 4, &tOsdImgInfo[0]);
-//		if(ubItemPreIdx <= AI_BSD_CAM4)//BSD
-//		{	
-//			//tOSD_GetOsdImgInfor(1, OSD_IMG2,OSD2IMG_AI_OFF_NOR , 4, &tOsdImgInfo[0]);
-//			if(tUI_CuSetting.ubIsEnableBSD[ubCamNumPre])
-//			{
-//				tOsdImgInfo[2].uwXStart = ubXpos + ubXstep * ubCamNumPre;
-//				tOsdImgInfo[2].uwYStart = ubYpos;
-//				tOSD_Img2(&tOsdImgInfo[2], OSD_UPDATE);
-//			}
-//			else
-//			{
-//				tOsdImgInfo[0].uwXStart = ubXpos + ubXstep * ubCamNumPre;
-//				tOsdImgInfo[0].uwYStart = ubYpos;
-//				tOSD_Img2(&tOsdImgInfo[0], OSD_UPDATE);
-//			}
-//		}
-		if(ubItemPreIdx <= AI_PD_CAM4)//PERSON_DET_ITEM
-		{	
-			if(tUI_CuSetting.ubDetectPeopleFlag[ubCamNumPre])
+		for(i = 0;i < CAM_4T;i++)
+		{
+			for(j = 0;j < AI_MAIN_COLUMN_COUNT;j++)
 			{
-				tOsdImgInfo[2].uwXStart = ubXpos + ubXstep * ubCamNumPre;
-				tOsdImgInfo[2].uwYStart = ubYpos;
-				tOSD_Img2(&tOsdImgInfo[2], OSD_UPDATE);
+				ubHighlight = (ubMainIdx == j*CAM_4T + i);
+				if(j < AI_ALGORITHM_COUNT)
+					uwImage = OSD2IMG_AI_BSD_NOR + 4*j + 2*(tUI_CamStatus[i].ubAIAlgorithm == j) + ubHighlight;
+				else
+					uwImage = OSD2IMG_AI_CONFIG_SETUP_NOR + ubHighlight;
+				tOSD_GetOsdImgInfor(1, OSD_IMG2, uwImage, 1, &tOsdImgInfo);
+				tOsdImgInfo.uwXStart = AI_ALGORITHM_X + AI_ALGORITHM_X_STEP*j;
+				tOsdImgInfo.uwYStart = AI_ALGORITHM_Y + AI_ALGORITHM_Y_STEP*i;
+				tOSD_Img2(&tOsdImgInfo, OSD_QUEUE);
 			}
-			else
-			{
-				tOsdImgInfo[0].uwXStart = ubXpos + ubXstep * ubCamNumPre;
-				tOsdImgInfo[0].uwYStart = ubYpos;
-				tOSD_Img2(&tOsdImgInfo[0], OSD_UPDATE);
-			}
-
-		}
-		else if(ubItemPreIdx > AI_PD_CAM4 && ubItemPreIdx <= AI_CD_CAM4)//VEHICLES_DET_ITEM
-		{	
-			if(tUI_CuSetting.ubDetectCarFlag[ubCamNumPre])
-			{
-				tOsdImgInfo[2].uwXStart = ubXpos + ubXstep * ubCamNumPre;
-				tOsdImgInfo[2].uwYStart = ubYpos + ubYstep*1;
-				tOSD_Img2(&tOsdImgInfo[2], OSD_UPDATE);
-			}
-			else
-			{
-				tOsdImgInfo[0].uwXStart = ubXpos + ubXstep * ubCamNumPre;
-				tOsdImgInfo[0].uwYStart = ubYpos + ubYstep*1;
-				tOSD_Img2(&tOsdImgInfo[0], OSD_UPDATE);
-			}
-
-		}
-		else if(ubItemPreIdx > AI_CD_CAM4 && ubItemPreIdx <= AI_ALARM_CAM4)//ALARM
-		{	
-			if(tUI_CuSetting.ubIsEnableBSDALARM[ubCamNumPre])
-			{
-				tOsdImgInfo[2].uwXStart = ubXpos + ubXstep * ubCamNumPre;
-				tOsdImgInfo[2].uwYStart = ubYpos + ubYstep*2;
-				tOSD_Img2(&tOsdImgInfo[2], OSD_UPDATE);
-			}
-			else
-			{
-				tOsdImgInfo[0].uwXStart = ubXpos + ubXstep * ubCamNumPre;
-				tOsdImgInfo[0].uwYStart = ubYpos + ubYstep*2;
-				tOSD_Img2(&tOsdImgInfo[0], OSD_UPDATE);
-			}
-
-		}
-		else if(ubItemPreIdx > AI_ALARM_CAM4 && ubItemPreIdx <= AI_TRIGGER_CAM4)
-		{	
-			if(tUI_CuSetting.ubBSDTriggerOut[ubCamNumPre])
-			{
-				tOsdImgInfo[2].uwXStart = ubXpos + ubXstep * ubCamNumPre;
-				tOsdImgInfo[2].uwYStart = ubYpos + ubYstep*3;
-				tOSD_Img2(&tOsdImgInfo[2], OSD_UPDATE);
-			}
-			else
-			{
-				tOsdImgInfo[0].uwXStart = ubXpos + ubXstep * ubCamNumPre;
-				tOsdImgInfo[0].uwYStart = ubYpos + ubYstep*3;
-				tOSD_Img2(&tOsdImgInfo[0], OSD_UPDATE);
-			}
-		}
-		else if(ubItemPreIdx > AI_TRIGGER_CAM4 && ubItemPreIdx <= AI_BSDRANGE_CAM4)
-		{	
-			tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_AI_CONFIG_SETUP_NOR, 2, &tOsdImgInfo[0]);
-			tOsdImgInfo[0].uwXStart = ubXpos + ubXstep * ubCamNumPre;
-			tOsdImgInfo[0].uwYStart = ubYpos + ubYstep*4;
-			tOSD_Img2(&tOsdImgInfo[0], OSD_UPDATE); 
-		//预留
 		}
 	}
-	//----------------------------cur----------------------------------------------
-	//cur
-	tOSD_GetOsdImgInfor(1, OSD_IMG2,OSD2IMG_AI_OFF_NOR , 4, &tOsdImgInfo[0]);
-//	if(ubItemCurIdx <= AI_BSD_CAM4)//BSD
-//	{	
-//		//tOSD_GetOsdImgInfor(1, OSD_IMG2,OSD2IMG_AI_OFF_NOR , 4, &tOsdImgInfo[0]);
-//		if(tUI_CuSetting.ubIsEnableBSD[ubCamNumCur])
-//		{
-//			tOsdImgInfo[3].uwXStart = ubXpos + ubXstep * ubCamNumCur;
-//			tOsdImgInfo[3].uwYStart = ubYpos;
-//			tOSD_Img2(&tOsdImgInfo[3], OSD_UPDATE);
-//		}
-//		else
-//		{
-//			tOsdImgInfo[1].uwXStart = ubXpos + ubXstep * ubCamNumCur;
-//			tOsdImgInfo[1].uwYStart = ubYpos;
-//			tOSD_Img2(&tOsdImgInfo[1], OSD_UPDATE);
-//		}
-//	}
-	if(ubItemCurIdx <= AI_PD_CAM4)//PERSON_DET_ITEM
-	{	
-		if(tUI_CuSetting.ubDetectPeopleFlag[ubCamNumCur])
+	else if(ubAISetupPage == AI_PAGE_BSD)
+	{
+		// 四个开关按两列排列，最后一项为 Cursor SETUP。
+		for(i = 0;i < AI_BSD_ITEM_COUNT;i++)
 		{
-			tOsdImgInfo[3].uwXStart = ubXpos + ubXstep * ubCamNumCur;
-			tOsdImgInfo[3].uwYStart = ubYpos;
-
-			tOSD_Img2(&tOsdImgInfo[3], OSD_UPDATE);
-		}
-		else
-		{
-			tOsdImgInfo[1].uwXStart = ubXpos + ubXstep * ubCamNumCur;
-			tOsdImgInfo[1].uwYStart = ubYpos;
-			tOSD_Img2(&tOsdImgInfo[1], OSD_UPDATE);
-		}
-	
-	}
-	else if(ubItemCurIdx > AI_PD_CAM4 && ubItemCurIdx <= AI_CD_CAM4)//VEHICLES_DET_ITEM
-	{	
-		if(tUI_CuSetting.ubDetectCarFlag[ubCamNumCur])
-		{
-			tOsdImgInfo[3].uwXStart = ubXpos + ubXstep * ubCamNumCur;
-			tOsdImgInfo[3].uwYStart = ubYpos + ubYstep * 1;
-			tOSD_Img2(&tOsdImgInfo[3], OSD_UPDATE);
-		}
-		else
-		{
-			tOsdImgInfo[1].uwXStart = ubXpos + ubXstep * ubCamNumCur;
-			tOsdImgInfo[1].uwYStart = ubYpos + ubYstep * 1;
-			tOSD_Img2(&tOsdImgInfo[1], OSD_UPDATE);
-		}
-	
-	}
-	else if(ubItemCurIdx > AI_CD_CAM4 && ubItemCurIdx <= AI_ALARM_CAM4)//ALARM
-	{	
-		if(tUI_CuSetting.ubIsEnableBSDALARM[ubCamNumCur])
-		{
-			tOsdImgInfo[3].uwXStart = ubXpos + ubXstep * ubCamNumCur;
-			tOsdImgInfo[3].uwYStart = ubYpos + ubYstep * 2;
-			tOSD_Img2(&tOsdImgInfo[3], OSD_UPDATE);
-		}
-		else
-		{
-			tOsdImgInfo[1].uwXStart =  ubXpos + ubXstep * ubCamNumCur;
-			tOsdImgInfo[1].uwYStart =  ubYpos + ubYstep * 2;
-			tOSD_Img2(&tOsdImgInfo[1], OSD_UPDATE);
-		}
-	
-	}
-	else if(ubItemCurIdx > AI_ALARM_CAM4 && ubItemCurIdx <= AI_TRIGGER_CAM4)
-	{	
-		if(tUI_CuSetting.ubBSDTriggerOut[ubCamNumCur])
-		{
-			tOsdImgInfo[3].uwXStart = ubXpos + ubXstep * ubCamNumCur;
-			tOsdImgInfo[3].uwYStart = ubYpos + ubYstep * 3;
-			tOSD_Img2(&tOsdImgInfo[3], OSD_UPDATE);
-		}
-		else
-		{
-			tOsdImgInfo[1].uwXStart = ubXpos + ubXstep * ubCamNumCur;
-			tOsdImgInfo[1].uwYStart = ubYpos + ubYstep * 3;
-			tOSD_Img2(&tOsdImgInfo[1], OSD_UPDATE);
+			uwImage = (i < AI_BSD_SWITCH_COUNT)?OSD2IMG_AI_OFF_NOR + 2*ubBSDValues[i]:OSD2IMG_AI_CONFIG_SETUP_NOR;
+			tOSD_GetOsdImgInfor(1, OSD_IMG2, uwImage + (ubItemIdx == i), 1, &tOsdImgInfo);
+			tOsdImgInfo.uwXStart = AI_BSD_SWITCH_X + AI_BSD_X_STEP*(i%2);
+			tOsdImgInfo.uwYStart = AI_BSD_Y + AI_BSD_Y_STEP*(i/2);
+			tOSD_Img2(&tOsdImgInfo, OSD_QUEUE);
 		}
 	}
-	else if(ubItemCurIdx > AI_TRIGGER_CAM4 && ubItemCurIdx <= AI_BSDRANGE_CAM4)
-	{	
-		tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_AI_CONFIG_SETUP_NOR, 2, &tOsdImgInfo[0]);
-		tOsdImgInfo[1].uwXStart = ubXpos + ubXstep * ubCamNumCur;
-		tOsdImgInfo[1].uwYStart = ubYpos + ubYstep*4;
-		tOSD_Img2(&tOsdImgInfo[1], OSD_UPDATE); 
+	else
+	{
+		for(i = 0;i < AI_PALLET_PARAM_COUNT;i++)
+		{
+			// 复用 486x56 的不透明框，只标记右侧滑条，文字不进入选中框。
+			tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_SYSTEM_DIMMER_GREEN_HL, 1, &tOsdImgInfo);
+			tOsdImgInfo.uwXStart = AI_PALLET_HL_X;
+			tOsdImgInfo.uwYStart = AI_PALLET_HL_Y + AI_PALLET_Y_STEP*i;
+			OSD_EraserImg2_NoUpdate(&tOsdImgInfo);
+			tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_SYSTEM_DIMMER_SLIDER, 1, &tSlider);
+			tSlider.uwXStart = AI_PALLET_SLIDER_X;
+			tSlider.uwYStart = AI_PALLET_SLIDER_Y + AI_PALLET_Y_STEP*i;
+			// 六行文字和滑条使用相同行距，横坐标直接使用对应语言图片的配置。
+			tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_AI_PALLET_SETUP + ubLanguage, 1, &tWord);
+			tWord.ulAddrSft += tWord.uwHSize*AI_PALLET_Y_STEP*i;
+			tWord.uwVSize = tSlider.uwVSize;
+			tWord.uwYStart = tSlider.uwYStart;
+			tOSD_Img2(&tWord, OSD_QUEUE);
+			if(ubDrawBox && ubItemIdx == i)
+			{
+				tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_SYSTEM_DIMMER_GREEN_HL + ubPalletRemoteMode, 1, &tOsdImgInfo);
+				tOsdImgInfo.uwXStart = AI_PALLET_HL_X;
+				tOsdImgInfo.uwYStart = AI_PALLET_HL_Y + AI_PALLET_Y_STEP*i;
+				tOSD_Img2(&tOsdImgInfo, OSD_QUEUE);
+			}
+			tOSD_Img2(&tSlider, OSD_QUEUE);
+			// 滑块使用 System 的不透明资源，各行根据自己的范围定位。
+			tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_SYSTEM_DIMMER_ROUND_HL, 1, &tRound);
+			ubValue = ubValues[i];
+			tRound.uwXStart = UI_Map(ubValue, ubPalletMin[i], ubPalletMax[i],
+				tSlider.uwXStart, tSlider.uwXStart + tSlider.uwHSize - tRound.uwHSize);
+			tRound.uwYStart = tSlider.uwYStart;
+			tOSD_Img2(&tRound, OSD_QUEUE);
+			UI_ShowButtonValueHighLight(ubValue, tRound.uwXStart + ((ubValue < 10)?14:4),
+				tRound.uwYStart + 9, OSD_QUEUE);
+		}
 	}
-
-
-#endif
+	OSD_UpdateQueueBuf();
 }
+
+static void UI_AIDrawMenu(void)
+{
+	OSD_IMG_INFO tOsdImgInfo;
+	uint8_t ubLanguage = (tUI_CuSetting.tLanguage == LANGUAGE_FRENCH)?1:
+		(tUI_CuSetting.tLanguage == LANGUAGE_GERMAN)?2:(tUI_CuSetting.tLanguage == LANGUAGE_CHINESE)?3:0;
+	UI_ClearOsdImageNoUpdate();
+	tOSD_GetOsdImgInfor(1, OSD_IMG1, OSD1IMG_SUBMENU2, 1, &tOsdImgInfo);
+	tOSD_Img1(&tOsdImgInfo, OSD_QUEUE);
+	if(ubAISetupPage == AI_PAGE_ALGORITHM)
+	{
+		tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_AI_TITLE + ubLanguage, 1, &tOsdImgInfo);
+		tOSD_Img2(&tOsdImgInfo, OSD_QUEUE);
+	}
+	else if(ubAISetupPage == AI_PAGE_BSD)
+	{
+		tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_AI_BSD_SETUP + ubLanguage, 1, &tOsdImgInfo);
+		tOSD_Img2(&tOsdImgInfo, OSD_QUEUE);
+	}
+	tOSD_GetOsdImgInfor(1, OSD_IMG2, ubUI_TouchPanelSts?OSD2IMG_RETURN_NOR:OSD2IMG_RETURN_BLACK, 1, &tOsdImgInfo);
+	tOSD_Img2(&tOsdImgInfo, OSD_QUEUE);
+	tUI_State = UI_SUBSUBMENU_STATE;
+	UI_AIDrawSubSubMenuItem(TRUE);
+}
+
+void UI_AIEnterMenu(void)
+{
+	ubAISetupPage = AI_PAGE_ALGORITHM;
+	ubPalletRemoteMode = REMOTE_SELECT_ITEM;
+	SendIrCodeFlag = FALSE;
+	UI_AIDrawMenu();
+}
+
+void UI_AISetupReturn(void)
+{
+	ubAISetupPage = AI_PAGE_BSD;
+	SendIrCodeFlag = FALSE;
+	UI_AIDrawMenu();
+}
+
+static void UI_AISetupExecute(void)
+{
+	uint8_t ubMainIdx = tSettingSubSubMenuItem.tSettingS[AI_ITEM].tSubMenuInfo.ubItemIdx;
+	uint8_t CamIdx = ubMainIdx%CAM_4T;
+	uint8_t ubItemIdx = tAISetupMenuItem.tSubMenuInfo.ubItemIdx;
+	if(ubAISetupPage == AI_PAGE_ALGORITHM)
+	{
+		// BSD/Pallet 按钮只切换算法，SETUP 按钮打开当前通道的设置页。
+		if(ubMainIdx < AI_SETUP_CAM1)
+			tUI_CamStatus[CamIdx].ubAIAlgorithm = ubMainIdx/CAM_4T;
+		else
+		{
+			ubAISetupPage = tUI_CamStatus[CamIdx].ubAIAlgorithm + AI_PAGE_BSD;
+			tAISetupMenuItem.ubItemCount = (ubAISetupPage == AI_PAGE_BSD)?
+				AI_BSD_ITEM_COUNT:AI_PALLET_ITEM_COUNT;
+			memset(&tAISetupMenuItem.tSubMenuInfo, 0, sizeof(UI_MenuItem_t));
+			UI_AIDrawMenu();
+			return;
+		}
+	}
+	else if(ubAISetupPage == AI_PAGE_BSD)
+	{
+		switch(ubItemIdx)
+		{
+			case 0: tUI_CuSetting.ubDetectPeopleFlag[CamIdx] = 1 - tUI_CuSetting.ubDetectPeopleFlag[CamIdx]; break;
+			case 1: tUI_CuSetting.ubDetectCarFlag[CamIdx] = 1 - tUI_CuSetting.ubDetectCarFlag[CamIdx]; break;
+			case 2: tUI_CuSetting.ubIsEnableBSDALARM[CamIdx] = 1 - tUI_CuSetting.ubIsEnableBSDALARM[CamIdx]; break;
+			case 3: tUI_CuSetting.ubBSDTriggerOut[CamIdx] = 1 - tUI_CuSetting.ubBSDTriggerOut[CamIdx]; break;
+			case 4:
+				// Cursor SETUP 进入当前通道的检测区域编辑页。
+				UI_AISubSubMenuExecute(CamIdx, 1);
+				UI_AIDrawSubSubSubMenuItem(TRUE);
+				return;
+		}
+	}
+	else
+	{
+		// 六个滑条统一使用确认键切换选择/调整模式，调整时允许左右键连发。
+		ubPalletRemoteMode = 1 - ubPalletRemoteMode;
+		SendIrCodeFlag = ubPalletRemoteMode;
+	}
+	UI_AIDrawSubSubMenuItem(TRUE);
+}
+
 //------------------------------------------------------------------------------------
 void UI_SystemDrawSubSubMenuItem(uint8_t ubDrawBox)
 {
@@ -1277,59 +1266,51 @@ extern uint8_t ISPlaying_wav;
 void UI_AISubSubMenuPage(UI_ArrowKey_t tArrowKey)
 {
 	UI_MenuAct_t tMenuAct;
-	OSD_IMG_INFO tOsdImgInfo[12],tOnOffOsdImgInfo[4],tEraserOsdImgInfo;
-	tSettingSubSubMenuItem.tSettingS[10].tSubMenuInfo.ubItemPreIdx = tSettingSubSubMenuItem.tSettingS[10].tSubMenuInfo.ubItemIdx;
-
-	if(SystemSubSubRemoteMode == REMOTE_SELECT_ITEM)
+	// AI 主页面与算法设置页分别使用各自的菜单焦点。
+	UI_SubMenuItem_t *pMenu = (ubAISetupPage == AI_PAGE_ALGORITHM)?&tSettingSubSubMenuItem.tSettingS[AI_ITEM]:&tAISetupMenuItem;
+	uint8_t CamIdx = tSettingSubSubMenuItem.tSettingS[AI_ITEM].tSubMenuInfo.ubItemIdx%CAM_4T;
+	uint8_t ubItemIdx = tAISetupMenuItem.tSubMenuInfo.ubItemIdx;
+	UI_PalletConfigInfo_t *pConfig = &tUI_CamStatus[CamIdx].tPalletConfig;
+	uint8_t *pValue[AI_PALLET_PARAM_COUNT] = {&pConfig->tDelayTurnOFF, &pConfig->tRateRange,
+		&pConfig->tFlowFrameInterval, &pConfig->tFlowPauseDuration, &pConfig->tFlowRunDuration,
+		&pConfig->tDectability};
+	if(tArrowKey == EXIT_ARROW)
 	{
-		tMenuAct = UI_KeyEventMap2SubSubMenuInfo(&tArrowKey, &tSettingSubSubMenuItem.tSettingS[10]);//AI
-		switch(tMenuAct)
+		// 设置页退出时保存并返回 AI 主页面，主页面退出时返回上级菜单。
+		SendIrCodeFlag = FALSE;
+		ubPalletRemoteMode = REMOTE_SELECT_ITEM;
+		if(ubAISetupPage != AI_PAGE_ALGORITHM)
 		{
-			case DRAW_HIGHLIGHT_MENUICON:
-				UI_AIDrawSubSubMenuItem(TRUE);
-				break;
-			case EXECUTE_MENUFUNC:
-				uint8_t ubItemCurIdx = tSettingSubSubMenuItem.tSettingS[10].tSubMenuInfo.ubItemIdx;
-				printf("**************************************************%d\n",ubItemCurIdx);
-//				if(ubItemCurIdx <= AI_BSD_CAM4)
-//				{
-//					tUI_CuSetting.ubIsEnableBSD[ubItemCurIdx%4] = 1- tUI_CuSetting.ubIsEnableBSD[ubItemCurIdx%4];
-//				}
-				if(ubItemCurIdx <= AI_PD_CAM4)
-				{
-					tUI_CuSetting.ubDetectPeopleFlag[ubItemCurIdx%4] = 1- tUI_CuSetting.ubDetectPeopleFlag[ubItemCurIdx%4];
-				}
-				else if(ubItemCurIdx <= AI_CD_CAM4)
-				{
-					tUI_CuSetting.ubDetectCarFlag[ubItemCurIdx%4] = 1- tUI_CuSetting.ubDetectCarFlag[ubItemCurIdx%4];
-
-				}
-				else if(ubItemCurIdx <= AI_ALARM_CAM4)
-				{
-					tUI_CuSetting.ubIsEnableBSDALARM[ubItemCurIdx%4] = 1- tUI_CuSetting.ubIsEnableBSDALARM[ubItemCurIdx%4];
-				}
-				else if(ubItemCurIdx <= AI_TRIGGER_CAM4)
-				{
-					tUI_CuSetting.ubBSDTriggerOut[ubItemCurIdx%4] = 1- tUI_CuSetting.ubBSDTriggerOut[ubItemCurIdx%4];
-				}
-				else if(ubItemCurIdx <= AI_BSDRANGE_CAM4)
-				{	
-					UI_AISubSubMenuExecute(ubItemCurIdx,1);
-					UI_AIDrawSubSubSubMenuItem(TRUE);
-			 		break;
-				}
-				UI_AIDrawSubSubMenuItem(TRUE);	
-				break;
-			case EXIT_MENUFUNC:
-				UI_AISubSubMenuExit();
-				break;
-			default:
-				break;
+			UI_UpdateDevStatusInfo();
+			UI_AIEnterMenu();
 		}
-
+		else
+			UI_AISubSubMenuExit();
+		return;
 	}
-
+	// 调整模式下按当前行的步长加减，到达上下限停止，确认键结束调整。
+	if(ubAISetupPage == AI_PAGE_PALLET && ubPalletRemoteMode != REMOTE_SELECT_ITEM)
+	{
+		if(tArrowKey == LEFT_ARROW && *pValue[ubItemIdx] > ubPalletMin[ubItemIdx])
+			*pValue[ubItemIdx] -= ubPalletStep[ubItemIdx];
+		else if(tArrowKey == RIGHT_ARROW && *pValue[ubItemIdx] < ubPalletMax[ubItemIdx])
+			*pValue[ubItemIdx] += ubPalletStep[ubItemIdx];
+		else if(tArrowKey == ENTER_ARROW)
+		{
+			ubPalletRemoteMode = REMOTE_SELECT_ITEM;
+			SendIrCodeFlag = FALSE;
+		}
+		UI_AIDrawSubSubMenuItem(TRUE);
+		return;
+	}
+	// 普通模式下，左右键移动焦点，确认键执行当前项。
+	tMenuAct = UI_KeyEventMap2SubSubMenuInfo(&tArrowKey, pMenu);
+	if(tMenuAct == DRAW_HIGHLIGHT_MENUICON)
+		UI_AIDrawSubSubMenuItem(TRUE);
+	else if(tMenuAct == EXECUTE_MENUFUNC)
+		UI_AISetupExecute();
 }
+
 //------------------------------------------------------------------------------------
 void UI_SystemSubSubMenuPage(UI_ArrowKey_t tArrowKey)
 {
@@ -3204,89 +3185,95 @@ void UI_RecordSubSubTouchMenuPage(TOUCH_EVENT_t *Touch_Info)
 //------------------------------------------------------------------------------ai-----------------------------------------------------------------------
 void UI_AISubSubTouchMenuPage(TOUCH_EVENT_t *Touch_Info)
 {
-#if 1
-	OSD_IMG_INFO tOsdImgInfo[12],tOnOffOsdImgInfo[4],tEraserOsdImgInfo;
-
-	uint8_t i,j,index,break_flag;
-	uint16_t X_Pos = AI_Config_Xpos,Y_Pos = AI_Config_Ypos,X_Step = AI_Config_Xstep,Y_Step = AI_Config_Ystep;
-	tSettingSubSubMenuItem.tSettingS[10].tSubMenuInfo.ubItemPreIdx = tSettingSubSubMenuItem.tSettingS[10].tSubMenuInfo.ubItemIdx;
-	switch(Touch_Info->Gesture)
+	OSD_IMG_INFO tOsdImgInfo, tRound;
+	uint8_t i, j, ubValue;
+	uint8_t CamIdx = tSettingSubSubMenuItem.tSettingS[AI_ITEM].tSubMenuInfo.ubItemIdx%CAM_4T;
+	UI_PalletConfigInfo_t *pConfig = &tUI_CamStatus[CamIdx].tPalletConfig;
+	uint8_t *pValue[AI_PALLET_PARAM_COUNT] = {&pConfig->tDelayTurnOFF, &pConfig->tRateRange,
+		&pConfig->tFlowFrameInterval, &pConfig->tFlowPauseDuration, &pConfig->tFlowRunDuration,
+		&pConfig->tDectability};
+	uint16_t uwX, uwY;
+	int16_t wTouchX, wTouchY;
+	if(Touch_Info->Gesture == TOUCH_PRESS)
 	{
-		case TOUCH_PRESS:
-			tOSD_GetOsdImgInfor(1, OSD_IMG2,OSD2IMG_AI_OFF_NOR ,1, &tOsdImgInfo[0]);
-			for(i = 0;i < 6;i++)
-			{
-				for(j = 0;j < 4;j++)
-				{		
-					if(Touch_Info->startX > X_Pos + X_Step*j
-						&& Touch_Info->startX < X_Pos + X_Step*j + tOsdImgInfo[0].uwHSize
-						&& Touch_Info->startY > Y_Pos + Y_Step*i
-						&& Touch_Info->startY < Y_Pos + Y_Step*i + tOsdImgInfo[0].uwVSize )
-					{
-						tSettingSubSubMenuItem.tSettingS[10].tSubMenuInfo.ubItemIdx = AI_PD_CAM1 + 4*i + j;
-						SystemSubSubRemoteMode = REMOTE_SELECT_ITEM;
-						break_flag = 1;
-						break;
-					}
-
-				}
-				if(break_flag == 1)
-				{
-					break_flag = 0;
-					break;
-				}
-			}
-			index = 4*i + j; 
-			if(index < AI_MAX)
-			{
-				switch(i%6)
-				{
-//					case 0:
-//						tUI_CuSetting.ubIsEnableBSD[j] = 1 - tUI_CuSetting.ubIsEnableBSD[j];	
-//						break;
-					case 0:
-						tUI_CuSetting.ubDetectPeopleFlag[j] = 1 - tUI_CuSetting.ubDetectPeopleFlag[j];	
-						break;
-					case 1:
-						tUI_CuSetting.ubDetectCarFlag[j] = 1 - tUI_CuSetting.ubDetectCarFlag[j];	
-						break;
-					case 2:
-						tUI_CuSetting.ubIsEnableBSDALARM[j] = 1 - tUI_CuSetting.ubIsEnableBSDALARM[j];	
-						break;
-					case 3:
-						tUI_CuSetting.ubBSDTriggerOut[j] = 1 - tUI_CuSetting.ubBSDTriggerOut[j];	
-						break;
-					case 4:
-						{	
-							UI_AISubSubMenuExecute(j,1);
-							UI_AIDrawSubSubSubMenuItem(TRUE);
-							//子级菜单提前返回
-							return;
-						}
-					default:
-						break;
-				}
-				UI_AIDrawSubSubMenuItem(TRUE);
-			}
-			else//return
-			{
-				tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_RETURN_HL, 1, &tOsdImgInfo[0]);	
-				if(Touch_Info->startX > tOsdImgInfo[0].uwXStart 
-					&& Touch_Info->startX < tOsdImgInfo[0].uwXStart + tOsdImgInfo[0].uwHSize
-					&& Touch_Info->startY > tOsdImgInfo[0].uwYStart 
-					&& Touch_Info->startY < tOsdImgInfo[0].uwYStart + tOsdImgInfo[0].uwVSize)
-				{
-					tOSD_Img2(&tOsdImgInfo[0], OSD_UPDATE);
-					TIMER_Delay_ms(30);
-					UI_MenuKey();
-				}
-			}
-			break;
-		default:
+		// 返回按钮先显示高亮，再复用按键退出逻辑完成保存和返回。
+		tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_RETURN_HL, 1, &tOsdImgInfo);
+		if(Touch_Info->startX >= tOsdImgInfo.uwXStart && Touch_Info->startX < tOsdImgInfo.uwXStart + tOsdImgInfo.uwHSize
+			&& Touch_Info->startY >= tOsdImgInfo.uwYStart && Touch_Info->startY < tOsdImgInfo.uwYStart + tOsdImgInfo.uwVSize)
+		{
+			tOSD_Img2(&tOsdImgInfo, OSD_UPDATE);
+			TIMER_Delay_ms(30);
+			UI_AISubSubMenuPage(EXIT_ARROW);
 			return;
+		}
+		if(ubAISetupPage == AI_PAGE_ALGORITHM)
+		{
+			tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_AI_CONFIG_SETUP_NOR, 1, &tOsdImgInfo);
+			for(i = 0;i < CAM_4T;i++)
+				for(j = 0;j < AI_MAIN_COLUMN_COUNT;j++)
+				{
+					uwX = AI_ALGORITHM_X + AI_ALGORITHM_X_STEP*j;
+					uwY = AI_ALGORITHM_Y + AI_ALGORITHM_Y_STEP*i;
+					if(Touch_Info->startX >= uwX && Touch_Info->startX < uwX + tOsdImgInfo.uwHSize
+						&& Touch_Info->startY >= uwY && Touch_Info->startY < uwY + tOsdImgInfo.uwVSize)
+					{
+						// 根据触摸命中的行、列还原主页面菜单索引。
+						tSettingSubSubMenuItem.tSettingS[AI_ITEM].tSubMenuInfo.ubItemIdx = j*CAM_4T + i;
+						UI_AISetupExecute();
+						return;
+					}
+				}
+		}
+		else if(ubAISetupPage == AI_PAGE_BSD)
+		{
+			tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_AI_CONFIG_SETUP_NOR, 1, &tOsdImgInfo);
+			// 使用与绘制相同的两列布局，判断开关和 Cursor SETUP 的触摸命中。
+			for(i = 0;i < AI_BSD_ITEM_COUNT;i++)
+			{
+				uwX = AI_BSD_SWITCH_X + AI_BSD_X_STEP*(i%2);
+				uwY = AI_BSD_Y + AI_BSD_Y_STEP*(i/2);
+				if(Touch_Info->startX >= uwX && Touch_Info->startX < uwX + tOsdImgInfo.uwHSize
+					&& Touch_Info->startY >= uwY && Touch_Info->startY < uwY + tOsdImgInfo.uwVSize)
+				{
+					tAISetupMenuItem.tSubMenuInfo.ubItemIdx = i;
+					UI_AISetupExecute();
+					return;
+				}
+			}
+		}
 	}
-#endif
+	// 六行滑条均支持点击和拖动，拖动时使用最新触点坐标。
+	if(ubAISetupPage == AI_PAGE_PALLET && (Touch_Info->Gesture == TOUCH_PRESS || Touch_Info->Gesture == TOUCH_PRESSDOWN))
+	{
+		tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_SYSTEM_DIMMER_SLIDER, 1, &tOsdImgInfo);
+		tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_SYSTEM_DIMMER_ROUND_HL, 1, &tRound);
+		wTouchX = (Touch_Info->Gesture == TOUCH_PRESS)?Touch_Info->startX:Touch_Info->endX;
+		wTouchY = (Touch_Info->Gesture == TOUCH_PRESS)?Touch_Info->startY:Touch_Info->endY;
+		for(i = 0;i < AI_PALLET_PARAM_COUNT;i++)
+		{
+			uwY = AI_PALLET_SLIDER_Y + AI_PALLET_Y_STEP*i;
+			if(wTouchX >= AI_PALLET_SLIDER_X - 10 && wTouchX <= AI_PALLET_SLIDER_X + tOsdImgInfo.uwHSize + 10
+				&& wTouchY >= uwY - 10 && wTouchY <= uwY + tOsdImgInfo.uwVSize + 10)
+			{
+				// 按滑块中心的位置换算数值，并吸附到当前参数允许的步长。
+				uwX = AI_PALLET_SLIDER_X + tRound.uwHSize/2;
+				if(wTouchX < uwX)
+					wTouchX = uwX;
+				if(wTouchX > AI_PALLET_SLIDER_X + tOsdImgInfo.uwHSize - tRound.uwHSize/2)
+					wTouchX = AI_PALLET_SLIDER_X + tOsdImgInfo.uwHSize - tRound.uwHSize/2;
+				ubValue = ((wTouchX - uwX)*((ubPalletMax[i] - ubPalletMin[i])/ubPalletStep[i])
+					+ (tOsdImgInfo.uwHSize - tRound.uwHSize)/2)/(tOsdImgInfo.uwHSize - tRound.uwHSize);
+				*pValue[i] = ubPalletMin[i] + ubValue*ubPalletStep[i];
+				tAISetupMenuItem.tSubMenuInfo.ubItemIdx = i;
+				ubPalletRemoteMode = REMOTE_SELECT_ITEM;
+				SendIrCodeFlag = FALSE;
+				UI_AIDrawSubSubMenuItem(TRUE);
+				return;
+			}
+		}
+	}
 }
+
 
 //------------------------------------------------------------------------------system-----------------------------------------------------------------------
 void UI_SystemSubSubTouchMenuPage(TOUCH_EVENT_t *Touch_Info)

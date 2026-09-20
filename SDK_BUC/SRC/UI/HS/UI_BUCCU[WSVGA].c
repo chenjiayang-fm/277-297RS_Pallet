@@ -4547,6 +4547,14 @@ void UI_ResetUIParameter(void)
 		tUI_CamStatus[tCamNum].tCamLaser = CAMLASER_ENABLE;
 		tUI_CamStatus[tCamNum].tCamLed = CAMLED_ENABLE;
 		tUI_CamStatus[tCamNum].ubVolumeLvl = 50;
+		tUI_CamStatus[tCamNum].ubAIAlgorithm = 0;
+		tUI_CamStatus[tCamNum].tPalletConfig.tDelayTurnOFF = 6;
+		tUI_CamStatus[tCamNum].tPalletConfig.tFlowFrameInterval = 0;
+		tUI_CamStatus[tCamNum].tPalletConfig.tRateRange = 2;
+		tUI_CamStatus[tCamNum].tPalletConfig.tFlowPauseDuration = 0;
+		tUI_CamStatus[tCamNum].tPalletConfig.tFlowRunDuration = 10;
+		tUI_CamStatus[tCamNum].tPalletConfig.tDectability = 52;
+		tUI_CamStatus[tCamNum].ubAIConfigVersion = UI_AI_CONFIG_VERSION;
 		
 		tUI_CuSetting.ubUpdateTxParam[tCamNum] = FALSE;
 		tUI_CuSetting.bColorBLGain[tCamNum] = 0;
@@ -4734,6 +4742,7 @@ void UI_ResetUIParameter(void)
 uint8_t UI_CheckUIParameter(void)
 {
 	UI_CamNum_t tCamNum;
+	uint8_t ubAIConfigUpdate = FALSE;
 	for(tCamNum = CAM1; tCamNum < CAM_4T; tCamNum++)
 	{	
 		UI_CHK_MYSYS(tUI_CamStatus[tCamNum].tCamDispLocation_Quad,DISP_LOWER_RIGHT + 1,DISP_UPPER_LEFT);
@@ -4764,6 +4773,28 @@ uint8_t UI_CheckUIParameter(void)
 		UI_CHK_MYSYS(tUI_CamStatus[tCamNum].ubVolumeLvl,99 + 1,50);
 
 		UI_CHK_MYSYS(tUI_CuSetting.ubUpdateTxParam[tCamNum],TRUE + 1,FALSE);
+
+		/* These eight bytes used to be reserved; keep the saved camera layout unchanged. */
+		UI_PalletConfigInfo_t *pConfig = &tUI_CamStatus[tCamNum].tPalletConfig;
+		if(tUI_CamStatus[tCamNum].ubAIConfigVersion != UI_AI_CONFIG_VERSION ||
+			tUI_CamStatus[tCamNum].ubAIAlgorithm >= AI_ALGORITHM_COUNT ||
+			pConfig->tDelayTurnOFF < AI_PALLET_DELAY_TURN_OFF_MIN || pConfig->tDelayTurnOFF > AI_PALLET_DELAY_TURN_OFF_MAX || pConfig->tDelayTurnOFF%AI_PALLET_DELAY_TURN_OFF_STEP ||
+			pConfig->tFlowFrameInterval > AI_PALLET_FLOW_FRAME_INTERVAL_MAX || pConfig->tRateRange < AI_PALLET_RATE_RANGE_MIN || pConfig->tRateRange > AI_PALLET_RATE_RANGE_MAX ||
+			pConfig->tFlowPauseDuration > AI_PALLET_FLOW_PAUSE_DURATION_MAX || pConfig->tFlowPauseDuration%AI_PALLET_FLOW_PAUSE_DURATION_STEP ||
+			pConfig->tFlowRunDuration < AI_PALLET_FLOW_RUN_DURATION_MIN || pConfig->tFlowRunDuration > AI_PALLET_FLOW_RUN_DURATION_MAX || pConfig->tFlowRunDuration%AI_PALLET_FLOW_RUN_DURATION_STEP ||
+			pConfig->tDectability > AI_PALLET_SENSITIVITY_MAX)
+		{
+			tUI_CamStatus[tCamNum].ubAIAlgorithm = 0;
+			tUI_CamStatus[tCamNum].tPalletConfig.tDelayTurnOFF = 6;
+			tUI_CamStatus[tCamNum].tPalletConfig.tFlowFrameInterval = 0;
+			tUI_CamStatus[tCamNum].tPalletConfig.tRateRange = 2;
+			tUI_CamStatus[tCamNum].tPalletConfig.tFlowPauseDuration = 0;
+			tUI_CamStatus[tCamNum].tPalletConfig.tFlowRunDuration = 10;
+			tUI_CamStatus[tCamNum].tPalletConfig.tDectability = 52;
+			tUI_CamStatus[tCamNum].ubAIConfigVersion = UI_AI_CONFIG_VERSION;
+			ubAIConfigUpdate = TRUE;
+		}
+
 	
 	}
 
@@ -4880,6 +4911,8 @@ uint8_t UI_CheckUIParameter(void)
 	
 	//language
 	UI_CHK_MYSYS(tUI_CuSetting.tLanguage,LANGUAGE_MAX,LANGUAGE_ENGLISH);
+	if(ubAIConfigUpdate)
+		UI_UpdateDevStatusInfo();
 	return rUI_SUCCESS;
 }
 //------------------------------------------------------------------------------
