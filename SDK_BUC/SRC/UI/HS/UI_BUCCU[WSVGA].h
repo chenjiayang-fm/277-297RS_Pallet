@@ -1525,7 +1525,7 @@ UI_CamSource UI_GetAudioSrc(void);
 void UI_SetAudioSrc(UI_CamSource tAdoSrc);
 void UI_CheckMenuOffCount(void);
 void UI_CheckPwrUartCount(void);
-void UI_ShowRecordingStatus(void);
+void UI_ShowRecordingStatus(bool is_flip);
 void UI_BackToDesktop(uint8_t ubSwitchView);
 void UI_ClearOsdImageNoUpdate(void);
 void UI_WakeUpTx(void);

@@ -594,6 +594,9 @@ OSD_RESULT tOSD_Img1 (OSD_IMG_INFO *pInfor, OSD_UPDATE_TYP tMode);
 	\endcode
 */
 OSD_RESULT tOSD_Img2 (OSD_IMG_INFO *pInfor, OSD_UPDATE_TYP tMode);
+// BSD 检测框：初始化红黄绿颜色索引，并按矩形位置绘制 4 像素边框。
+void get_bmp_idx(OSD_IMG_INFO *tInfor);
+OSD_RESULT tOSD_Img2_DrawBox(OSD_IMG_INFO *pInfor, uint8_t alarm_type, OSD_UPDATE_TYP tMode);
 //------------------------------------------------------------------------------
 /*!
 	\brief 		Display Font OSD Function

@@ -1519,6 +1519,11 @@ void APP_Start(void)
 		SET_VOLUME_IO = 1;
 	}
 
+	// 复用 BSD 区域图片的红黄绿颜色，必须在首次绘制检测框前初始化。
+	OSD_IMG_INFO tInfor[3];
+	tOSD_GetOsdImgInfor(1, OSD_IMG1, OSD1IMG_BSD_RANGE_DOTS_RED, 3, &tInfor[0]);
+	get_bmp_idx(&tInfor[0]);
+
 #ifdef RTC676x
 	if (tAPP_KNLInfo.tRfTestMode == APP_RF_TEST_OFF)
 #endif

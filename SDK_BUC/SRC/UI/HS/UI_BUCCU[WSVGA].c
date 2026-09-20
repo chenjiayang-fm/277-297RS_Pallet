@@ -1393,8 +1393,14 @@ void UI_DrawSdCardInfoIcon(void)
 {
 	static uint8_t ubShowSdinfo = TRUE;
 
-	OSD_IMG_INFO tOsdImgInfo[2],tSdCardImgInfo[2],tReturnImgInfo;
+	OSD_IMG_INFO tOsdImgInfo[2],tSdCardImgInfo[2],tReturnImgInfo,tEraserOsdImgInfo;
 	tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_SDCARD_NO, 2, &tOsdImgInfo[0]);
+	// 状态图标刷新时擦除穿过该区域的旧检测框，保留屏幕最外侧 4 像素。
+	tEraserOsdImgInfo.uwXStart = 972;
+	tEraserOsdImgInfo.uwYStart = 4;
+	tEraserOsdImgInfo.uwHSize = 48;
+	tEraserOsdImgInfo.uwVSize = 76;
+	OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);
 
 	tOSD_GetOsdImgInfor(1, OSD_IMG2, (tUI_CuSetting.tLanguage == LANGUAGE_ENGLISH)?OSD2IMG_DESKTOP_SD_NEED_FORMAT:
 									(tUI_CuSetting.tLanguage == LANGUAGE_GERMAN)?OSD2IMG_DESKTOP_SD_NEED_FORMAT_GER:
@@ -2137,17 +2143,34 @@ void UI_DrawBSDRange(void)
 //------------------------------------------------------------------------------
 void UI_DrawSignalInfoIcon(OSD_UPDATE_TYP update_type)
 {
-	OSD_IMG_INFO tOsdImgInfo;
+	OSD_IMG_INFO tOsdImgInfo,tEraserOsdImgInfo;
 	uint16_t uwLcd_HSize = uwLCD_GetLcdHoSize();
 	uint16_t uwLcd_VSize = uwLCD_GetLcdVoSize();
 	//printf("uwLcd_HSize = %d,uwLcd_VSize = %d\n",uwLcd_HSize,uwLcd_VSize);
 	switch(tCamViewSel.tCamViewType)
 	{
 		case SINGLE_VIEW:
+			// 清除信号图标背景中的旧框线，再绘制当前信号图标。
+			tEraserOsdImgInfo.uwXStart = 4;
+			tEraserOsdImgInfo.uwYStart = 4;
+			tEraserOsdImgInfo.uwHSize = 106;
+			tEraserOsdImgInfo.uwVSize = 46;
+			OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);
 			tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_DESKTOP_SIGNAL_LEVEL0 + tUI_CamStatus[tCamViewSel.tCamViewPool[0]].tCamAntLvl, 1, &tOsdImgInfo);
 			tOSD_Img2(&tOsdImgInfo, update_type);
 			break;
 		case DUAL_VIEW:
+			// 清除信号图标背景中的旧框线，再绘制当前信号图标。
+			tEraserOsdImgInfo.uwXStart = 4;
+			tEraserOsdImgInfo.uwYStart = 4;
+			tEraserOsdImgInfo.uwHSize = 106;
+			tEraserOsdImgInfo.uwVSize = 46;
+			OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);
+			tEraserOsdImgInfo.uwXStart = 518;
+			tEraserOsdImgInfo.uwYStart = 4;
+			tEraserOsdImgInfo.uwHSize = 106;
+			tEraserOsdImgInfo.uwVSize = 46;
+			OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);
 			//----------------------left---------------------------------
 			tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_DESKTOP_SIGNAL_LEVEL0 + tUI_CamStatus[tCamViewSel.tCamViewPool[0]].tCamAntLvl, 1, &tOsdImgInfo);
 			tOSD_Img2(&tOsdImgInfo, OSD_QUEUE);
@@ -2157,6 +2180,27 @@ void UI_DrawSignalInfoIcon(OSD_UPDATE_TYP update_type)
 			tOSD_Img2(&tOsdImgInfo, update_type);
 			break;
 		case QUAD_VIEW:
+			// 清除信号图标背景中的旧框线，再绘制当前信号图标。
+			tEraserOsdImgInfo.uwXStart = 4;
+			tEraserOsdImgInfo.uwYStart = 4;
+			tEraserOsdImgInfo.uwHSize = 106;
+			tEraserOsdImgInfo.uwVSize = 46;
+			OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);
+			tEraserOsdImgInfo.uwXStart = 518;
+			tEraserOsdImgInfo.uwYStart = 4;
+			tEraserOsdImgInfo.uwHSize = 106;
+			tEraserOsdImgInfo.uwVSize = 46;
+			OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);
+			tEraserOsdImgInfo.uwXStart = 4;
+			tEraserOsdImgInfo.uwYStart = 306;
+			tEraserOsdImgInfo.uwHSize = 106;
+			tEraserOsdImgInfo.uwVSize = 46;
+			OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);
+			tEraserOsdImgInfo.uwXStart = 518;
+			tEraserOsdImgInfo.uwYStart = 306;
+			tEraserOsdImgInfo.uwHSize = 106;
+			tEraserOsdImgInfo.uwVSize = 46;
+			OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);
 			//--------------------------------upper left------------------------------
 			tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_DESKTOP_SIGNAL_LEVEL0 + tUI_CamStatus[tCamViewSel.tCamViewPool[0]].tCamAntLvl, 1, &tOsdImgInfo);
 			tOSD_Img2(&tOsdImgInfo, OSD_QUEUE);
@@ -2526,725 +2570,200 @@ void UI_StopWav(uint8_t index,uint8_t chn)
 }
 //-------------------------------------------------------------------------------------------------------
 
+#define READ_RECT_LINE_LENGTH 12
+#define AI_BOX_SPLIT_LINE_WIDTH 4
+
+// 单画面、双画面和四画面的有效区域，分屏时保留中间 4 像素分割线。
+static uint8_t UI_GetAIBoxArea(uint32_t chn, OSD_IMG_INFO *tArea)
+{
+	tArea->uwXStart = 0;
+	tArea->uwYStart = 0;
+	tArea->uwHSize = 1024;
+	tArea->uwVSize = 600;
+	if(DeskTopShowView < DUALVIEW_ITEM)
+		return chn == tCamViewSel.tCamViewPool[0];
+	if(DeskTopShowView == DUALVIEW_ITEM)
+	{
+		tArea->uwHSize = 512 - AI_BOX_SPLIT_LINE_WIDTH / 2;
+		if(tUI_CamStatus[chn].tCamDispLocation_Dual == DISP_RIGHT)
+			tArea->uwXStart = 512 + AI_BOX_SPLIT_LINE_WIDTH / 2;
+		else if(tUI_CamStatus[chn].tCamDispLocation_Dual != DISP_LEFT)
+			return FALSE;
+	}
+	else if(DeskTopShowView == QUALVIEW_ITEM)
+	{
+		tArea->uwHSize = 512 - AI_BOX_SPLIT_LINE_WIDTH / 2;
+		tArea->uwVSize = 300 - AI_BOX_SPLIT_LINE_WIDTH / 2;
+		switch(tUI_CamStatus[chn].tCamDispLocation_Quad)
+		{
+			case DISP_UPPER_LEFT:
+				break;
+			case DISP_UPPER_RIGHT:
+				tArea->uwXStart = 512 + AI_BOX_SPLIT_LINE_WIDTH / 2;
+				break;
+			case DISP_LOWER_LEFT:
+				tArea->uwYStart = 300 + AI_BOX_SPLIT_LINE_WIDTH / 2;
+				break;
+			case DISP_LOWER_RIGHT:
+				tArea->uwXStart = 512 + AI_BOX_SPLIT_LINE_WIDTH / 2;
+				tArea->uwYStart = 300 + AI_BOX_SPLIT_LINE_WIDTH / 2;
+				break;
+			default:
+				return FALSE;
+		}
+	}
+	else
+		return FALSE;
+	return TRUE;
+}
+
+// 过小的目标扩大 12 像素；靠近边缘时平移回本通道，超大框再裁到有效区域。
+static void UI_FitAIBoxToSafeArea(Algo_Pos *pos, OSD_IMG_INFO *tArea)
+{
+	int32_t xMin = tArea->uwXStart;
+	int32_t yMin = tArea->uwYStart;
+	int32_t xMax = xMin + tArea->uwHSize - 1;
+	int32_t yMax = yMin + tArea->uwVSize - 1;
+	int32_t x1 = pos->x1, y1 = pos->y1, x2 = pos->x2, y2 = pos->y2;
+	int32_t offset;
+
+	if(x2 - x1 < READ_RECT_LINE_LENGTH)
+	{
+		if(xMax - x2 < READ_RECT_LINE_LENGTH)
+			x1 -= READ_RECT_LINE_LENGTH;
+		else
+			x2 += READ_RECT_LINE_LENGTH;
+	}
+	if(y2 - y1 < READ_RECT_LINE_LENGTH)
+	{
+		if(yMax - y2 < READ_RECT_LINE_LENGTH)
+			y1 -= READ_RECT_LINE_LENGTH;
+		else
+			y2 += READ_RECT_LINE_LENGTH;
+	}
+	if(x1 < xMin)
+	{
+		offset = xMin - x1;
+		x1 += offset;
+		x2 += offset;
+	}
+	if(x2 > xMax)
+	{
+		offset = x2 - xMax;
+		x1 -= offset;
+		x2 -= offset;
+	}
+	if(y1 < yMin)
+	{
+		offset = yMin - y1;
+		y1 += offset;
+		y2 += offset;
+	}
+	if(y2 > yMax)
+	{
+		offset = y2 - yMax;
+		y1 -= offset;
+		y2 -= offset;
+	}
+	if(x1 < xMin) x1 = xMin;
+	if(y1 < yMin) y1 = yMin;
+	pos->x1 = (uint16_t)x1;
+	pos->y1 = (uint16_t)y1;
+	pos->x2 = (uint16_t)x2;
+	pos->y2 = (uint16_t)y2;
+}
+
+// 清框和重画共用同一范围，连同画面边缘一起清除，避免目标移动后留下边框。
+// 顶部信号、录像和 SD 卡区域仍由各自的状态刷新函数维护。
+static void UI_ClearAIBoxArea(OSD_IMG_INFO *tArea)
+{
+	OSD_IMG_INFO tEraserOsdImgInfo = *tArea;
+	uint16_t topHeight = (tArea->uwXStart == 0 && tArea->uwYStart == 0)?80:50;
+	uint16_t rightWidth = (tArea->uwXStart + tArea->uwHSize == 1024 && tArea->uwYStart == 0)?52:0;
+
+	// 顶部图标之间的空白区域。
+	tEraserOsdImgInfo.uwXStart = tArea->uwXStart + 110;
+	tEraserOsdImgInfo.uwHSize = tArea->uwHSize - 110 - rightWidth;
+	tEraserOsdImgInfo.uwVSize = topHeight;
+	OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);
+
+	// 图标以下的整个通道区域。
+	tEraserOsdImgInfo = *tArea;
+	tEraserOsdImgInfo.uwYStart += topHeight;
+	tEraserOsdImgInfo.uwVSize -= topHeight;
+	OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);
+
+	// 顶部及两侧贴边的检测框也必须清除，不能只清画面内部。
+	tEraserOsdImgInfo = *tArea;
+	tEraserOsdImgInfo.uwVSize = 4;
+	OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);
+	tEraserOsdImgInfo.uwYStart += 4;
+	tEraserOsdImgInfo.uwHSize = 4;
+	tEraserOsdImgInfo.uwVSize = topHeight - 4;
+	OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);
+	tEraserOsdImgInfo.uwXStart = tArea->uwXStart + tArea->uwHSize - 4;
+	OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);
+}
+
 void UI_EventClearBox(uint32_t ClearBOX_chn)
 {
-	OSD_IMG_INFO tEraserOsdImgInfo,tVoiceOsdImgInfo;
-	Algo_Result clearBox;
-	clearBox.chn = ClearBOX_chn;
-	//UI_StopWav(0,clearBox.chn);
-
-	//printf("****************clearBox.chn is %d ************\n",clearBox.chn);
+	OSD_IMG_INFO tArea;
+	if(ClearBOX_chn >= 4)
+		return;
 	osMutexWait(osEnterVolumeFlag, osWaitForever);
-	if(MenuOnFlag == TRUE)
+	if(MenuOnFlag == TRUE || !UI_GetAIBoxArea(ClearBOX_chn, &tArea))
 	{
-		//printf("return clear Box!!!!!!!!!!!!!\n");
 		osMutexRelease(osEnterVolumeFlag);
 		return;
 	}
-	UI_ClearPersonFlag(clearBox.chn);
-	UI_ClearCarFlag(clearBox.chn);
-	if(1)//新的清框
-	{
-		//tOSD_GetOsdImgInfor(1, OSD_IMG1, OSD1IMG_SUBMENU2, 1, &tEraserOsdImgInfo);		
-		if(DeskTopShowView < DUALVIEW_ITEM)
-		{
-			tEraserOsdImgInfo.uwXStart = 110;
-			tEraserOsdImgInfo.uwYStart = 0;
-			tEraserOsdImgInfo.uwHSize  = 862;//972-110
-			tEraserOsdImgInfo.uwVSize  = 80;//600-40-80
-			OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);	
-			
-			//tOSD_GetOsdImgInfor(1, OSD_IMG1, OSD1IMG_SUBMENU2, 1, &tEraserOsdImgInfo);
-			tEraserOsdImgInfo.uwXStart = 0;
-			tEraserOsdImgInfo.uwYStart = 80;
-			tEraserOsdImgInfo.uwHSize  = 1024;
-			tEraserOsdImgInfo.uwVSize  = 520;//600-80
-			OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);			
-		}	
-		else if(DeskTopShowView == DUALVIEW_ITEM)
-		{
-			//tEraserOsdImgInfo.uwHSize /= 2;
-	
-			if(tUI_CamStatus[clearBox.chn].tCamDispLocation_Dual == DISP_LEFT)
-			{
-				tEraserOsdImgInfo.uwXStart = 110;
-				tEraserOsdImgInfo.uwYStart = 0;
-				tEraserOsdImgInfo.uwHSize  = 400;//512-110-2
-				tEraserOsdImgInfo.uwVSize  = 80;
-				OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);	
-				
-				tEraserOsdImgInfo.uwXStart = 0;
-				tEraserOsdImgInfo.uwHSize  = 510;//510-110
-				tEraserOsdImgInfo.uwYStart = 80;
-				tEraserOsdImgInfo.uwVSize  = 520;//600-80
-				OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);			
-			}
-			else if(tUI_CamStatus[clearBox.chn].tCamDispLocation_Dual == DISP_RIGHT)
-			{
-				tEraserOsdImgInfo.uwXStart = 624;//1024/2+110+2;
-				tEraserOsdImgInfo.uwYStart = 0;
-				tEraserOsdImgInfo.uwHSize  = 348;//512-110-52-2
-				tEraserOsdImgInfo.uwVSize  = 50;
-				OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);	
-			
-				tEraserOsdImgInfo.uwXStart = 514;//1024/2+2;
-				tEraserOsdImgInfo.uwYStart = 50;			
-				tEraserOsdImgInfo.uwHSize  = 510;//512-2
-				tEraserOsdImgInfo.uwVSize = 550;//600-50
-				OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);		
-			}
-			else
-			{
-				return;
-			}
-		}
-		else if (DeskTopShowView == QUALVIEW_ITEM)
-		{	
-			if (tUI_CamStatus[clearBox.chn].tCamDispLocation_Quad == DISP_UPPER_LEFT)
-			{
-
-				tEraserOsdImgInfo.uwXStart = 110;
-				tEraserOsdImgInfo.uwYStart = 0;
-				tEraserOsdImgInfo.uwHSize  = 400;//512-110-2
-				tEraserOsdImgInfo.uwVSize  = 80;
-				OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);		
-				
-				tEraserOsdImgInfo.uwXStart = 0;
-				tEraserOsdImgInfo.uwYStart = 80;
-				tEraserOsdImgInfo.uwHSize  = 510;//510			
-				tEraserOsdImgInfo.uwVSize  = 218;//300-80-2
-				OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);	
-				
-			}
-			else if (tUI_CamStatus[clearBox.chn].tCamDispLocation_Quad == DISP_UPPER_RIGHT)
-			{
-				tEraserOsdImgInfo.uwXStart = 622;//110+1024/2+2;
-				tEraserOsdImgInfo.uwYStart = 0;
-				tEraserOsdImgInfo.uwHSize  = 350;//512-110-52
-				tEraserOsdImgInfo.uwVSize  = 50;
-				OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);	
-				
-				tEraserOsdImgInfo.uwXStart = 514;
-				tEraserOsdImgInfo.uwYStart = 50;
-				tEraserOsdImgInfo.uwHSize  = 512;//510-110
-				tEraserOsdImgInfo.uwVSize  = 248;//300-50-4
-				OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);	
-
-			}
-			else if (tUI_CamStatus[clearBox.chn].tCamDispLocation_Quad == DISP_LOWER_LEFT)
-			{
-				tEraserOsdImgInfo.uwXStart = 110;
-				tEraserOsdImgInfo.uwYStart = 302;// 600/2+2;
-				tEraserOsdImgInfo.uwHSize  = 400;//512-110-4
-				tEraserOsdImgInfo.uwVSize  = 50;
-				OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);
-				tEraserOsdImgInfo.uwXStart = 0;
-				tEraserOsdImgInfo.uwYStart = 350;//600/2+2+50;			
-				tEraserOsdImgInfo.uwHSize  = 510;//512-2
-				tEraserOsdImgInfo.uwVSize  = 250;//300-50-2
-				OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);	
-			}
-			else if (tUI_CamStatus[clearBox.chn].tCamDispLocation_Quad == DISP_LOWER_RIGHT)
-			{
-				tEraserOsdImgInfo.uwXStart = 622;//110+512;
-				tEraserOsdImgInfo.uwYStart = 302;// 600/2+2;
-				tEraserOsdImgInfo.uwHSize  = 402;//512-110
-				tEraserOsdImgInfo.uwVSize  = 50;
-				OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);
-				tEraserOsdImgInfo.uwXStart = 514;//512+2
-				tEraserOsdImgInfo.uwYStart = 350;//600/2+50;			
-				tEraserOsdImgInfo.uwHSize  = 510;//512-2
-				tEraserOsdImgInfo.uwVSize  = 250;//300-50
-				OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);	
-
-
-			}
-			else
-			{
-				return;
-			}
-	
-		}
-		
-	//	OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);
-	}
+	UI_ClearPersonFlag(ClearBOX_chn);
+	UI_ClearCarFlag(ClearBOX_chn);
+	UI_ClearAIBoxArea(&tArea);
 	osMutexRelease(osEnterVolumeFlag);
-
-#if 0 //wav 后续写成一个函数再加个变量控制是否打开�?
-	Stop_WavchnFlag[clearBox.chn] = 1;	
-	if(DeskTopShowView == QUALVIEW_ITEM )//&& Stop_WavchnFlag[0] && Stop_WavchnFlag [1] && Stop_WavchnFlag[2] && Stop_WavchnFlag[3])
-	{
-		printf("qual stop wav:%d,%d,%d,%d!!!\n",Stop_WavchnFlag[0],Stop_WavchnFlag[1],Stop_WavchnFlag[2],Stop_WavchnFlag[3]);
-		if(Stop_WavchnFlag[0] && Stop_WavchnFlag [1] && Stop_WavchnFlag[2] && Stop_WavchnFlag[3] &&ISPlaying_wav == 1)//四路没有检测到目标的时�?
-		{
-			ADO_WavStop();
-			ISPlaying_wav = 0;
-		}
-
-	}
-	else if (DeskTopShowView == DUALVIEW_ITEM)
-	{
-		WavDual_ChnTemp0 = tCamViewSel.tCamViewPool[0];
-		WavDual_ChnTemp1 = tCamViewSel.tCamViewPool[1];
-		if(Stop_WavchnFlag[WavDual_ChnTemp0] && Stop_WavchnFlag [WavDual_ChnTemp1])
-		{
-			ADO_WavStop();
-			ISPlaying_wav = 0;
-			printf("stop wav!!!\n");
-		}
-
-	}
-	else 
-	{
-		if(ISPlaying_wav == 1)
-		{
-			ADO_WavStop();
-			ISPlaying_wav = 0;
-		}
-	}
-#endif
-
-
-	
-// 	if (tUI_CuSetting.ubIsShowBSDBox == 0)
-//	{
-//		ubDrawBSDRange = 0;
-//		UI_DrawDesktopIcon();
-//		ubDrawBSDRange = 1;
-//
-//		return;
-//	}
-#if 0 //旧的清框函数
-	tOSD_GetOsdImgInfor(1, OSD_IMG1, OSD1IMG_SUBMENU2, 1, &tEraserOsdImgInfo);
-	tEraserOsdImgInfo.uwHSize -= 20;
-	tEraserOsdImgInfo.uwVSize -= 20;
-	tEraserOsdImgInfo.uwXStart += 10;
-	tEraserOsdImgInfo.uwYStart += 10;
-	if (DeskTopShowView == DUALVIEW_ITEM)
-	{
-		tEraserOsdImgInfo.uwHSize /= 2;
-
-		if (tUI_CamStatus[clearBox.chn].tCamDispLocation_Dual == DISP_LEFT)
-		{
-			
-		}
-		else if (tUI_CamStatus[clearBox.chn].tCamDispLocation_Dual == DISP_RIGHT)
-		{
-			tEraserOsdImgInfo.uwXStart += 1024/2;
-		}
-
-		OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);
-	}
-	else if (DeskTopShowView == QUALVIEW_ITEM)
-	{
-		tEraserOsdImgInfo.uwHSize /= 2;
-		tEraserOsdImgInfo.uwVSize /= 2;
-		//printf("clearBox.chn is %d ************\n",clearBox.chn);
-		if (tUI_CamStatus[clearBox.chn].tCamDispLocation_Quad == DISP_UPPER_LEFT)
-		{
-			tEraserOsdImgInfo.uwHSize -= 2;
-			tEraserOsdImgInfo.uwVSize -= 2;
-			//printf("erase 1 ch box!!!!!!!!\n");
-		}
-		else if (tUI_CamStatus[clearBox.chn].tCamDispLocation_Quad == DISP_UPPER_RIGHT)
-		{
-			//printf("erase 2 ch box!!!!!!!!\n");
-			tEraserOsdImgInfo.uwVSize -= 2;
-			tEraserOsdImgInfo.uwXStart += 1024/2;
-		}
-		else if (tUI_CamStatus[clearBox.chn].tCamDispLocation_Quad == DISP_LOWER_LEFT)
-		{
-			//printf("erase 3 ch box!!!!!!!!\n");
-			tEraserOsdImgInfo.uwHSize -= 2;
-			tEraserOsdImgInfo.uwYStart += 600/2;
-		}
-		else if (tUI_CamStatus[clearBox.chn].tCamDispLocation_Quad == DISP_LOWER_RIGHT)
-		{
-			//printf("erase 4 ch box!!!!!!!!\n");
-			tEraserOsdImgInfo.uwXStart += 1024/2;
-			tEraserOsdImgInfo.uwYStart += 600/2;
-		}
-		OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);
-		//OSD_EraserImg2(&tEraserOsdImgInfo);
-	}
-	else
-	{
-		if (DeskTopShowView == clearBox.chn)
-		{
-			OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);
-		}
-		#if 0
-		osMutexWait(osPlayVolumeFlag,osWaitForever);
-		{
-			ADO_WavStop();
-			//BUF_ResetUsbdBuf();
-			printf("stop wav!!!\n");
-		}
-		osMutexRelease(osPlayVolumeFlag);
-		#endif
-	}
-#endif
-
-
-
-
-	//KNL_ReleaseUsbdBuf
-//	UI_DrawSignalInfoIcon(OSD_QUEUE);
-//	ubDrawBSDRange = 0;
-//	UI_DrawDesktopIcon();
-//	ubDrawBSDRange = 1;
-#if 0//画通道的音量标
-		if(DeskTopShowView < DUALVIEW_ITEM)
-		{
-			tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_DESKTOP_VOICE_MUTE + 1 - tUI_CuSetting.ubMuteFlag, 1, &tVoiceOsdImgInfo);
-			tVoiceOsdImgInfo.uwXStart += 1024/2;
-			tOSD_Img2(&tVoiceOsdImgInfo, OSD_QUEUE);
-		}
-		else if(DeskTopShowView == DUALVIEW_ITEM)
-		{
-			if(tUI_CuSetting.tAdoSrcCamNum_Dual == tCamViewSel.tCamViewPool[0] && clearBox.chn == 0)//voice
-			{
-				tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_DESKTOP_VOICE_MUTE + 1 - tUI_CuSetting.ubMuteFlag, 1, &tVoiceOsdImgInfo);
-				tOSD_Img2(&tVoiceOsdImgInfo, OSD_QUEUE);
-			}
-				
-			else if(tUI_CuSetting.tAdoSrcCamNum_Dual == tCamViewSel.tCamViewPool[1] && clearBox.chn == 1)
-			{
-				tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_DESKTOP_VOICE_MUTE + 1 - tUI_CuSetting.ubMuteFlag, 1, &tVoiceOsdImgInfo);
-				tVoiceOsdImgInfo.uwXStart += 1024/2;
-				tOSD_Img2(&tVoiceOsdImgInfo, OSD_QUEUE);
-			}
-		}
-		else if(DeskTopShowView == QUALVIEW_ITEM)
-		{
-			if(tUI_CuSetting.tAdoSrcCamNum_Quad == tCamViewSel.tCamViewPool[0] && clearBox.chn == 0)//voice
-			{
-				tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_DESKTOP_VOICE_MUTE + 1 - tUI_CuSetting.ubMuteFlag, 1, &tVoiceOsdImgInfo);
-				tVoiceOsdImgInfo.uwYStart -= 600/2;//600 - (tVoiceOsdImgInfo.uwYStart + tVoiceOsdImgInfo.uwVSize);
-				tOSD_Img2(&tVoiceOsdImgInfo, OSD_QUEUE);
-			}			
-			else if(tUI_CuSetting.tAdoSrcCamNum_Quad == tCamViewSel.tCamViewPool[1] && clearBox.chn == 1)
-			{
-				tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_DESKTOP_VOICE_MUTE + 1 - tUI_CuSetting.ubMuteFlag, 1, &tVoiceOsdImgInfo);
-				tVoiceOsdImgInfo.uwYStart -= 600/2;
-				tVoiceOsdImgInfo.uwXStart += 1024/2;
-				tOSD_Img2(&tVoiceOsdImgInfo, OSD_QUEUE);
-			}
-			else if(tUI_CuSetting.tAdoSrcCamNum_Quad == tCamViewSel.tCamViewPool[2] && clearBox.chn == 2)
-			{
-				tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_DESKTOP_VOICE_MUTE + 1 - tUI_CuSetting.ubMuteFlag, 1, &tVoiceOsdImgInfo);
-				tOSD_Img2(&tVoiceOsdImgInfo, OSD_QUEUE);
-			}
-			else if(tUI_CuSetting.tAdoSrcCamNum_Quad == tCamViewSel.tCamViewPool[3] && clearBox.chn == 3)
-			{
-				tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_DESKTOP_VOICE_MUTE + 1 - tUI_CuSetting.ubMuteFlag, 1, &tVoiceOsdImgInfo);
-				tVoiceOsdImgInfo.uwXStart += 1024/2;
-				tOSD_Img2(&tVoiceOsdImgInfo, OSD_QUEUE);
-			}		
-		}
-#endif
-
-
-
-
-//	UI_DrawSdCardInfoIcon();
-//	UI_DrawTxBatteryInfoIcon();
-	//memset(&previousRet, 0, sizeof(Algo_Result));
 }
 
 //-------------------------------------------------------------------------------------------------------
 void UI_EventDrawBox(Algo_Result showBox)
 {
-	OSD_IMG_INFO tInfor;
-	OSD_IMG_INFO tInfor_H_line, tInfor_V_line;
-	OSD_IMG_INFO tEraserOsdImgInfo;
+	OSD_IMG_INFO tArea, tBox;
 	static uint8_t LoadJpegFlag = 0;
-	static uint8_t dropFramflag[4] = {0};
-	static OSD_IMG_INFO g_tOsdInfoLast[4];
-	static uint8_t g_ubNeedEraseLast = 0;
-	short dx, dy, k;
-	static OSD_IMG_INFO tInfor_H_line_Y[3],tInfor_H_line_X[3],tVoiceOsdImgInfo[2],tPD_OsdImagInfo[2],tCD_OsdImagInfo[2];	
-	uint16_t X1, Y1, X2, Y2, wTemp;
+	static OSD_IMG_INFO tPD_OsdImagInfo[2],tCD_OsdImagInfo[2];
 
+	if(showBox.chn >= 4)
+		return;
 	osMutexWait(osEnterVolumeFlag, osWaitForever);
-	if(MenuOnFlag == TRUE || isDrawNosignal[showBox.chn] == 1||ubUI_FinishViewSwitch == 0 || tUI_State == UI_SET_VOLUME_STATE)
+	if(MenuOnFlag == TRUE || isDrawNosignal[showBox.chn] == 1 || ubUI_FinishViewSwitch == 0 ||
+		tUI_State == UI_SET_VOLUME_STATE || !UI_GetAIBoxArea(showBox.chn, &tArea))
 	{
 		osMutexRelease(osEnterVolumeFlag);
 		return;
 	}
 	if(LoadJpegFlag == 0)
-	{	
-		//加载画框的资源，仅加载一�?
-		//检测框
-		tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_RED_HORI_LINE_30x4, 1, &tInfor_H_line_X[2]);
-		tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_RED_VERT_LINE_4x30, 1, &tInfor_H_line_Y[2]);
-
-		tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_YELLOW_HORI_LINE_30x4, 1, &tInfor_H_line_X[1]);
-		tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_YELLOW_VERT_LINE_4x30, 1, &tInfor_H_line_Y[1]);
-
-		tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_GREEN_HORI_LINE_30x4, 1, &tInfor_H_line_X[0]);
-		tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_GREEN_VERT_LINE_4x30, 1, &tInfor_H_line_Y[0]);	
-		//音频
-		//tOSD_GetOsdImgInfor(1, OSD_IMG1, OSD1IMG_DESKTOP_VOICE_MUTE, 2, &tVoiceOsdImgInfo[0]);
-		//人车标志
+	{
 		tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_PERSON_DETECUED_FLAG, 2, &tPD_OsdImagInfo[0]);
 		tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_Car_DETECUED_FLAG, 2, &tCD_OsdImagInfo[0]);
 		LoadJpegFlag = 1;
 	}
 
-	
 	Drawing_BoxFlag[showBox.chn] = 1;
-
-//	if (tUI_CuSetting.ubIsShowBSDBox == 0)
-//	{
-//		if(showBox.P_OR_C == 3)
-//		{			
-//			UI_DrawPersonFlag(showBox.chn);
-//			UI_DrawCarFlag(showBox.chn);
-//		}
-//		else if(showBox.P_OR_C == 1)
-//		{			
-//			UI_DrawPersonFlag(showBox.chn);
-//		}
-//		else if(showBox.P_OR_C == 2)
-//		{			
-//			UI_DrawCarFlag(showBox.chn);
-//		}
-//		return;
-//	}
-
-#if 1//旧的画框逻辑	
-	if(1)//清框
+	UI_ClearAIBoxArea(&tArea);
+	if(ubDrawBSDRange == 1)
 	{
-		//tOSD_GetOsdImgInfor(1, OSD_IMG1, OSD1IMG_SUBMENU2, 1, &tEraserOsdImgInfo);		
-		if(DeskTopShowView < DUALVIEW_ITEM)
+		for(uint8_t i = 0; i < showBox.cnt && i < DATA_LENGTH_MAX; i++)
 		{
-			#if 1
-			tEraserOsdImgInfo.uwXStart = 110;
-			tEraserOsdImgInfo.uwYStart = 0;
-			tEraserOsdImgInfo.uwHSize  = 862;//972-110
-			tEraserOsdImgInfo.uwVSize  = 80;//600-40-80
-			OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);	
-			
-			//tOSD_GetOsdImgInfor(1, OSD_IMG1, OSD1IMG_SUBMENU2, 1, &tEraserOsdImgInfo);
-			tEraserOsdImgInfo.uwXStart = 0;
-			tEraserOsdImgInfo.uwYStart = 80;
-			tEraserOsdImgInfo.uwHSize  = 1024;
-			tEraserOsdImgInfo.uwVSize  = 520;//600-80
-			OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);			
-			#else
-			tEraserOsdImgInfo.uwXStart = 0;
-			tEraserOsdImgInfo.uwYStart = 0;
-			tEraserOsdImgInfo.uwHSize  = 1020;//972-110
-			tEraserOsdImgInfo.uwVSize  = 580;//600-40-80
-			OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);
-
-			
-			#endif
-
-		}	
-		else if(DeskTopShowView == DUALVIEW_ITEM)
-		{
-			//tEraserOsdImgInfo.uwHSize /= 2;
-	
-			if(tUI_CamStatus[showBox.chn].tCamDispLocation_Dual == DISP_LEFT)
-			{
-				tEraserOsdImgInfo.uwXStart = 110;
-				tEraserOsdImgInfo.uwYStart = 0;
-				tEraserOsdImgInfo.uwHSize  = 400;//512-110-2
-				tEraserOsdImgInfo.uwVSize  = 80;
-				OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);	
-				
-				tEraserOsdImgInfo.uwXStart = 0;				
-				tEraserOsdImgInfo.uwYStart = 80;
-				tEraserOsdImgInfo.uwHSize  = 510;//510-110
-				tEraserOsdImgInfo.uwVSize  = 520;//600-80
-				OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);			
-			}
-			else if(tUI_CamStatus[showBox.chn].tCamDispLocation_Dual == DISP_RIGHT)
-			{
-				tEraserOsdImgInfo.uwXStart = 624;//1024/2+110+2;
-				tEraserOsdImgInfo.uwYStart = 0;
-				tEraserOsdImgInfo.uwHSize  = 348;//512-110-52-2
-				tEraserOsdImgInfo.uwVSize  = 50;
-				OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);	
-			
-				tEraserOsdImgInfo.uwXStart = 514;//1024/2+2;
-				tEraserOsdImgInfo.uwYStart = 50;			
-				tEraserOsdImgInfo.uwHSize  = 510;//512-2
-				tEraserOsdImgInfo.uwVSize = 550;//600-50
-				OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);		
-			}
-			else
-			{
-				return;
-			}
-		}
-		else if (DeskTopShowView == QUALVIEW_ITEM)
-		{	
-			if (tUI_CamStatus[showBox.chn].tCamDispLocation_Quad == DISP_UPPER_LEFT)
-			{
-
-				tEraserOsdImgInfo.uwXStart = 110;
-				tEraserOsdImgInfo.uwYStart = 0;
-				tEraserOsdImgInfo.uwHSize  = 400;//512-110-2
-				tEraserOsdImgInfo.uwVSize  = 80;
-				OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);		
-				
-				tEraserOsdImgInfo.uwXStart = 0;
-				tEraserOsdImgInfo.uwYStart = 80;
-				tEraserOsdImgInfo.uwHSize  = 510;//510			
-				tEraserOsdImgInfo.uwVSize  = 218;//300-80-2
-				OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);	
-				
-			}
-			else if (tUI_CamStatus[showBox.chn].tCamDispLocation_Quad == DISP_UPPER_RIGHT)
-			{
-				tEraserOsdImgInfo.uwXStart = 624;//110+1024/2+2;
-				tEraserOsdImgInfo.uwYStart = 0;
-				tEraserOsdImgInfo.uwHSize  = 348;//512-110-52-2
-				tEraserOsdImgInfo.uwVSize  = 50;
-				OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);	
-				
-				tEraserOsdImgInfo.uwXStart = 514;
-				tEraserOsdImgInfo.uwYStart = 50;
-				tEraserOsdImgInfo.uwHSize  = 512;//510-110
-				tEraserOsdImgInfo.uwVSize  = 248;//300-50-4
-				OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);	
-
-			}
-			else if (tUI_CamStatus[showBox.chn].tCamDispLocation_Quad == DISP_LOWER_LEFT)
-			{
-				tEraserOsdImgInfo.uwXStart = 110;
-				tEraserOsdImgInfo.uwYStart = 302;// 600/2+2;
-				tEraserOsdImgInfo.uwHSize  = 400;//512-110-4
-				tEraserOsdImgInfo.uwVSize  = 50;
-				OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);
-				tEraserOsdImgInfo.uwXStart = 0;
-				tEraserOsdImgInfo.uwYStart = 350;//600/2+2+50;			
-				tEraserOsdImgInfo.uwHSize  = 510;//512-2
-				tEraserOsdImgInfo.uwVSize  = 250;//300-50-2
-				OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);	
-			}
-			else if (tUI_CamStatus[showBox.chn].tCamDispLocation_Quad == DISP_LOWER_RIGHT)
-			{
-				tEraserOsdImgInfo.uwXStart = 622;//110+512;
-				tEraserOsdImgInfo.uwYStart = 302;// 600/2+2;
-				tEraserOsdImgInfo.uwHSize  = 402;//512-110
-				tEraserOsdImgInfo.uwVSize  = 50;
-				OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);
-				tEraserOsdImgInfo.uwXStart = 514;//512+2
-				tEraserOsdImgInfo.uwYStart = 350;//600/2+50;			
-				tEraserOsdImgInfo.uwHSize  = 510;//512-2
-				tEraserOsdImgInfo.uwVSize  = 250;//300-50
-				OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);	
-
-
-			}
-			else
-			{
-				return;
-			}
-	
-		}
-		
-	//	OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);
-	}
-	else
-	{
-		if(DeskTopShowView < DUALVIEW_ITEM)
-		{
-			tEraserOsdImgInfo.uwXStart = 0;
-			tEraserOsdImgInfo.uwYStart = 0;
-			tEraserOsdImgInfo.uwHSize  = 1024;//972-110
-			tEraserOsdImgInfo.uwVSize  = 600;//600-40-80
-			OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);	
-		}
-		else if(DeskTopShowView == DUALVIEW_ITEM)
-		{
-			if(tUI_CamStatus[showBox.chn].tCamDispLocation_Dual == DISP_LEFT)
-			{
-				tEraserOsdImgInfo.uwXStart = 0;
-				tEraserOsdImgInfo.uwYStart = 0;
-				tEraserOsdImgInfo.uwHSize  = 512;//972-110
-				tEraserOsdImgInfo.uwVSize  = 600;//600-40-80
-				OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);	
-			}
-			else if(tUI_CamStatus[showBox.chn].tCamDispLocation_Dual == DISP_RIGHT)
-			{
-				tEraserOsdImgInfo.uwXStart = 512;
-				tEraserOsdImgInfo.uwYStart = 0;
-				tEraserOsdImgInfo.uwHSize  = 512;//972-110
-				tEraserOsdImgInfo.uwVSize  = 600;//600-40-80
-				OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);
-			}
-			
-		}
-		else if(DeskTopShowView == QUALVIEW_ITEM)
-		{
-			if(tUI_CamStatus[showBox.chn].tCamDispLocation_Dual == DISP_UPPER_LEFT)
-			{
-				tEraserOsdImgInfo.uwXStart = 0;
-				tEraserOsdImgInfo.uwYStart = 0;
-				tEraserOsdImgInfo.uwHSize  = 512;//972-110
-				tEraserOsdImgInfo.uwVSize  = 300;//600-40-80
-				OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);	
-			}
-			else if(tUI_CamStatus[showBox.chn].tCamDispLocation_Dual == DISP_UPPER_RIGHT)
-			{
-				tEraserOsdImgInfo.uwXStart = 512;
-				tEraserOsdImgInfo.uwYStart = 0;
-				tEraserOsdImgInfo.uwHSize  = 512;//972-110
-				tEraserOsdImgInfo.uwVSize  = 300;//600-40-80
-				OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);
-			}
-			else if(tUI_CamStatus[showBox.chn].tCamDispLocation_Dual == DISP_LOWER_LEFT)
-			{
-				tEraserOsdImgInfo.uwXStart = 0;
-				tEraserOsdImgInfo.uwYStart = 300;
-				tEraserOsdImgInfo.uwHSize  = 512;//972-110
-				tEraserOsdImgInfo.uwVSize  = 300;//600-40-80
-				OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);
-			}
-			else if(tUI_CamStatus[showBox.chn].tCamDispLocation_Dual == DISP_LOWER_RIGHT)
-			{
-				tEraserOsdImgInfo.uwXStart = 512;
-				tEraserOsdImgInfo.uwYStart = 300;
-				tEraserOsdImgInfo.uwHSize  = 512;//972-110
-				tEraserOsdImgInfo.uwVSize  = 300;//600-40-80
-				OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);
-			}
-
+			// 跳过串口中的反向坐标，正常小目标仍会扩大后显示。
+			if(showBox.pos[i].x2 < showBox.pos[i].x1 || showBox.pos[i].y2 < showBox.pos[i].y1)
+				continue;
+			UI_FitAIBoxToSafeArea(&showBox.pos[i], &tArea);
+			tBox.uwXStart = showBox.pos[i].x1;
+			tBox.uwYStart = showBox.pos[i].y1;
+			tBox.uwHSize = showBox.pos[i].x2 - showBox.pos[i].x1 + 1;
+			tBox.uwVSize = showBox.pos[i].y2 - showBox.pos[i].y1 + 1;
+			tOSD_Img2_DrawBox(&tBox, showBox.pos[i].alarm_type, OSD_QUEUE);
 		}
 	}
-
-	#if 1 //画横�?
-		if(ubDrawBSDRange == 1)
-		{
-			for (uint8_t i = 0; i < showBox.cnt; i++)
-			{
-				#if 0 // 画完整的�?
-				dx = showBox.pos[i].x2 - showBox.pos[i].x1;
-				if (dx > 30)
-				{
-					if ((dx - 30)%30 == 0)
-					{
-						k = (dx - 60)/30;
-					}
-					else
-					{
-						k = (dx - 60)/30 + 1;
-					}
-		
-					for (uint8_t j = 0; j <= k; j++)
-					{
-
-						tInfor_H_line_X[(showBox.pos[i].alarm_type-1)].uwXStart = showBox.pos[i].x1 + j*30;
-						tInfor_H_line_X[(showBox.pos[i].alarm_type-1)].uwYStart = showBox.pos[i].y2 - 8;
-						tOSD_Img2(&tInfor_H_line_X[(showBox.pos[i].alarm_type-1)], OSD_QUEUE);
-					}
-				}
-				#else
-				dx = showBox.pos[i].x2 - showBox.pos[i].x1;
-				k = dx / 30;
-				if(k)
-					k--;
-				//printf("x1:%d,x2:%d,k:%d\n",showBox.pos[i].x1,showBox.pos[i].x2,k);
-				for (uint8_t j = 0; j <= k; j++)
-				{
-
-					tInfor_H_line_X[(showBox.pos[i].alarm_type-1)].uwXStart = showBox.pos[i].x1 + j*30;
-					tInfor_H_line_X[(showBox.pos[i].alarm_type-1)].uwYStart = showBox.pos[i].y2 - 8;
-					tOSD_Img2(&tInfor_H_line_X[(showBox.pos[i].alarm_type-1)], OSD_QUEUE);
-				}				
-				
-				#endif
-				
-			}
-		}
-	#else	
-		if(ubDrawBSDRange == 1)
-		{
-					for (uint8_t i = 0; i < showBox.cnt; i++)
-					{
-						tInfor_H_line_X[(showBox.pos[i].alarm_type-1)].uwXStart = showBox.pos[i].x1;
-						tInfor_H_line_X[(showBox.pos[i].alarm_type-1)].uwYStart = showBox.pos[i].y1;
-						tOSD_Img2(&tInfor_H_line_X[(showBox.pos[i].alarm_type-1)], OSD_QUEUE);
-						tInfor_H_line_Y[(showBox.pos[i].alarm_type-1)].uwXStart = showBox.pos[i].x1;
-						tInfor_H_line_Y[(showBox.pos[i].alarm_type-1)].uwYStart = showBox.pos[i].y1;
-						tOSD_Img2(&tInfor_H_line_Y[(showBox.pos[i].alarm_type-1)], OSD_QUEUE);					
-						tInfor_H_line_X[(showBox.pos[i].alarm_type-1)].uwXStart = showBox.pos[i].x2 - 30;
-						tInfor_H_line_X[(showBox.pos[i].alarm_type-1)].uwYStart = showBox.pos[i].y2 - 8;	
-						tOSD_Img2(&tInfor_H_line_X[(showBox.pos[i].alarm_type-1)], OSD_QUEUE);
-						tInfor_H_line_Y[(showBox.pos[i].alarm_type-1)].uwXStart = showBox.pos[i].x2 - 8;
-						tInfor_H_line_Y[(showBox.pos[i].alarm_type-1)].uwYStart = showBox.pos[i].y2 - 30;
-						tOSD_Img2(&tInfor_H_line_Y[(showBox.pos[i].alarm_type-1)], OSD_QUEUE);						
-					}
-				}		
-	#endif
 	Drawing_BoxFlag[showBox.chn] = 0;
-	
-//	printf("draw box down!!!\n");
-#endif
-	#if 0//画通道的音量标
-	if(DeskTopShowView < DUALVIEW_ITEM)
-	{
-		//tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_DESKTOP_VOICE_MUTE + 1 - tUI_CuSetting.ubMuteFlag, 1, &tVoiceOsdImgInfo);
-		tVoiceOsdImgInfo[1-tUI_CuSetting.ubMuteFlag].uwXStart = 452+1024/2;
-		tVoiceOsdImgInfo[1-tUI_CuSetting.ubMuteFlag].uwYStart = 550;
-		tOSD_Img2(&tVoiceOsdImgInfo[1-tUI_CuSetting.ubMuteFlag], OSD_QUEUE);
-	}
-	else if(DeskTopShowView == DUALVIEW_ITEM)
-	{
-		if(tUI_CuSetting.tAdoSrcCamNum_Dual == tCamViewSel.tCamViewPool[0] && showBox.chn == 0)//voice
-		{
-			//tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_DESKTOP_VOICE_MUTE + 1 - tUI_CuSetting.ubMuteFlag, 1, &tVoiceOsdImgInfo);
-			tVoiceOsdImgInfo[1-tUI_CuSetting.ubMuteFlag].uwXStart = 452;
-			tVoiceOsdImgInfo[1-tUI_CuSetting.ubMuteFlag].uwYStart = 550;
-			tOSD_Img2(&tVoiceOsdImgInfo[1-tUI_CuSetting.ubMuteFlag], OSD_QUEUE);
-		}
-			
-		else if(tUI_CuSetting.tAdoSrcCamNum_Dual == tCamViewSel.tCamViewPool[1] && showBox.chn == 1)
-		{
-			//tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_DESKTOP_VOICE_MUTE + 1 - tUI_CuSetting.ubMuteFlag, 1, &tVoiceOsdImgInfo);
-			tVoiceOsdImgInfo[1-tUI_CuSetting.ubMuteFlag].uwXStart = 452+1024/2;
-			tVoiceOsdImgInfo[1-tUI_CuSetting.ubMuteFlag].uwYStart = 550;
-			tOSD_Img2(&tVoiceOsdImgInfo[1-tUI_CuSetting.ubMuteFlag], OSD_QUEUE);
-		}
-	}
-	else if(DeskTopShowView == QUALVIEW_ITEM)
-	{
-		if(tUI_CuSetting.tAdoSrcCamNum_Quad == tCamViewSel.tCamViewPool[0] && showBox.chn == 0)//voice
-		{
-			//tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_DESKTOP_VOICE_MUTE + 1 - tUI_CuSetting.ubMuteFlag, 1, &tVoiceOsdImgInfo);
-			
-			tVoiceOsdImgInfo[1-tUI_CuSetting.ubMuteFlag].uwYStart = 550-600/2;//600 - (tVoiceOsdImgInfo.uwYStart + tVoiceOsdImgInfo.uwVSize);
-			tVoiceOsdImgInfo[1-tUI_CuSetting.ubMuteFlag].uwXStart = 452;
-			tOSD_Img2(&tVoiceOsdImgInfo[1-tUI_CuSetting.ubMuteFlag], OSD_QUEUE);
-		}			
-		else if(tUI_CuSetting.tAdoSrcCamNum_Quad == tCamViewSel.tCamViewPool[1] && showBox.chn == 1)
-		{
-			//tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_DESKTOP_VOICE_MUTE + 1 - tUI_CuSetting.ubMuteFlag, 1, &tVoiceOsdImgInfo);
-			tVoiceOsdImgInfo[1-tUI_CuSetting.ubMuteFlag].uwYStart = 550-600/2;
-			tVoiceOsdImgInfo[1-tUI_CuSetting.ubMuteFlag].uwXStart = 452+1024/2;
-			tOSD_Img2(&tVoiceOsdImgInfo[1-tUI_CuSetting.ubMuteFlag], OSD_QUEUE);
-		}
-		else if(tUI_CuSetting.tAdoSrcCamNum_Quad == tCamViewSel.tCamViewPool[2] && showBox.chn == 2)
-		{
-			//tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_DESKTOP_VOICE_MUTE + 1 - tUI_CuSetting.ubMuteFlag, 1, &tVoiceOsdImgInfo);
-			tVoiceOsdImgInfo[1-tUI_CuSetting.ubMuteFlag].uwXStart = 452;
-			tVoiceOsdImgInfo[1-tUI_CuSetting.ubMuteFlag].uwYStart = 550;
-			tOSD_Img2(&tVoiceOsdImgInfo[1-tUI_CuSetting.ubMuteFlag], OSD_QUEUE);
-		}
-		else if(tUI_CuSetting.tAdoSrcCamNum_Quad == tCamViewSel.tCamViewPool[3] && showBox.chn == 3)
-		{
-			//tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_DESKTOP_VOICE_MUTE + 1 - tUI_CuSetting.ubMuteFlag, 1, &tVoiceOsdImgInfo);
-			tVoiceOsdImgInfo[1-tUI_CuSetting.ubMuteFlag].uwYStart = 550;
-			tVoiceOsdImgInfo[1-tUI_CuSetting.ubMuteFlag].uwXStart = 452+1024/2;
-			tOSD_Img2(&tVoiceOsdImgInfo[1-tUI_CuSetting.ubMuteFlag], OSD_QUEUE);
-		}		
-	}
-	#endif
+
 	if(showBox.P_OR_C == 3)
 	{			
 		UI_DrawPersonFlag(showBox.chn,tPD_OsdImagInfo);
@@ -3507,7 +3026,8 @@ void UI_UpdateStatus(uint16_t *pThreadCnt)
 
 		if((*pThreadCnt % UI_UPDATESTS_PERIOD) == 0)
 		{
-				UI_DrawSignalInfoIcon(OSD_UPDATE);
+				UI_ShowRecordingStatus(FALSE);
+				UI_DrawSignalInfoIcon(OSD_QUEUE);
 				if(tUI_State == UI_DISPLAY_STATE)
 					UI_DrawNoSignalIcon();
 				UI_DrawTxBatteryInfoIcon();
@@ -3517,7 +3037,7 @@ void UI_UpdateStatus(uint16_t *pThreadCnt)
 		
 		if((*pThreadCnt % UI_RECORDINGSTS_PERIOD) == 0)
 		{
-			UI_ShowRecordingStatus();
+			UI_ShowRecordingStatus(TRUE);
 		}
 	}
 //	if(Stop_WavchnFlag[0]&&Stop_WavchnFlag[1]&&Stop_WavchnFlag[2]&&Stop_WavchnFlag[3])
@@ -7477,16 +6997,24 @@ void UI_CheckTriggerOverCount(void)
 }
 
 //------------------------------------------------------------------
-void UI_ShowRecordingStatus(void)
+void UI_ShowRecordingStatus(bool is_flip)
 {
-	OSD_IMG_INFO tOsdImgInfo[3];
+	OSD_IMG_INFO tOsdImgInfo[3],tEraserOsdImgInfo;
 	tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_RECORDING_BLACK_ICON, 3, &tOsdImgInfo[0]);
 	static uint8_t ubImgIdx = 0;
+	// 信号图标下方也是保留区，先擦除整段背景，避免小录像图标之外残留框线。
+	tEraserOsdImgInfo.uwXStart = 4;
+	tEraserOsdImgInfo.uwYStart = 50;
+	tEraserOsdImgInfo.uwHSize = 106;
+	tEraserOsdImgInfo.uwVSize = 30;
+	OSD_EraserImg2_NoUpdate(&tEraserOsdImgInfo);
 	if(UI_REC_START == tUI_RecPlayAct.tRecAct)
 	{
 		if(tUI_SyncAppState == APP_LINK_STATE)
 		{
-			ubImgIdx = 1 - ubImgIdx;
+			// 重画图标时保持当前状态，仅录像定时刷新时切换闪烁。
+			if(is_flip)
+				ubImgIdx = 1 - ubImgIdx;
 			tOSD_Img2(&tOsdImgInfo[ubImgIdx], OSD_UPDATE);
 		}
 		else

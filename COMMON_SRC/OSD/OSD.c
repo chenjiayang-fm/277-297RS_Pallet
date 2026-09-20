@@ -1063,6 +1063,73 @@ void tOSD_Img1_Test (void)
 
 
 //------------------------------------------------------------------------------
+// 检测框直接写入 OSD2 像素缓冲区，四条边向内绘制，线宽为 4 像素。
+#define READ_RECT_LINE_WIDTH 4
+
+static uint8_t red_bmp_idx = 0;
+static uint8_t yellow_bmp_idx = 0;
+static uint8_t green_bmp_idx = 0;
+
+// 从现有 BSD 红、黄、绿图片读取颜色索引，避免写死调色板中的位置。
+void get_bmp_idx(OSD_IMG_INFO *tInfor)
+{
+	uint32_t ulSfAddr = tOSD_SfAddr.ulOsdImgSfStartAddr;
+
+	SF_Read(ulSfAddr + tInfor[0].ulAddrSft, 1, &red_bmp_idx);
+	SF_Read(ulSfAddr + tInfor[1].ulAddrSft, 1, &yellow_bmp_idx);
+	SF_Read(ulSfAddr + tInfor[2].ulAddrSft, 1, &green_bmp_idx);
+}
+
+OSD_RESULT tOSD_Img2_DrawBox(OSD_IMG_INFO *pInfor, uint8_t alarm_type, OSD_UPDATE_TYP tMode)
+{
+	uint32_t ulMemAddr = tOSD_BufInfor.ulOsdImg2BufAddr + (OSD_PAT_NUM << 1);
+	uint8_t bmp_idx = (alarm_type == 1)?green_bmp_idx:(alarm_type == 2?yellow_bmp_idx:red_bmp_idx);
+	uint16_t y;
+
+	// 坐标来自串口，先检查尺寸和边界，防止直接写像素时越界或上下边重叠。
+	if(pInfor->uwHSize < READ_RECT_LINE_WIDTH * 2 || pInfor->uwVSize < READ_RECT_LINE_WIDTH * 2 ||
+		pInfor->uwXStart + pInfor->uwHSize > uwOSD_HSize ||
+		pInfor->uwYStart + pInfor->uwVSize > uwOSD_VSize || alarm_type < 1 || alarm_type > 3)
+		return OSD_LOCA_FAIL;
+
+	osMutexWait(OSD_Mutex, osWaitForever);
+	if(!(OSD_BUF_STATE_MASK & ubOSD_BufFlag))
+	{
+		ubOSD_BufFlag |= OSD_BUF2_PAT_STATE;
+		OSD_SfUpdateData(tOSD_SfAddr.ulOsdImgSfStartAddr + tOSD_PatInfor.ulOsdPatSft,
+			tOSD_BufInfor.ulOsdImg2BufAddr, (tOSD_PatInfor.ubOsdImgPatNum + OSD_PAT_CR_NUM) << 1);
+	}
+
+	for(y = 0; y < pInfor->uwVSize; y++)
+	{
+		uint8_t *row = (uint8_t *)(ulMemAddr + (pInfor->uwYStart + y) * uwOSD_HSize + pInfor->uwXStart);
+		if(y < READ_RECT_LINE_WIDTH || y >= pInfor->uwVSize - READ_RECT_LINE_WIDTH)
+			memset(row, bmp_idx, pInfor->uwHSize); // 上边和下边
+		else
+		{
+			memset(row, bmp_idx, READ_RECT_LINE_WIDTH); // 左边
+			memset(row + pInfor->uwHSize - READ_RECT_LINE_WIDTH, bmp_idx, READ_RECT_LINE_WIDTH); // 右边
+		}
+	}
+
+	// 一帧中的多个目标先入队，沿用原有 OSD 刷新流程。
+	if(OSD_UPDATE == tMode)
+	{
+		uint8_t ubDelayCnt = 5;
+		while(OSD_BUF_EMPTY == pOSD_GetOsdBufInfor()->tBufState)
+		{
+			osDelay(1);
+			if(--ubDelayCnt) break;
+		}
+		OSD_UpdateImg2();
+	}
+	else
+		ubOSD_BufFlag = (ubOSD_BufFlag & OSD_BUF_STATE_MASK) | ((OSD_IMG1_Q & ubOSD_BufFlag)?OSD_IMG1_Q|OSD_IMG2_Q:OSD_IMG2_Q);
+	osMutexRelease(OSD_Mutex);
+	return OSD_OK;
+}
+
+//------------------------------------------------------------------------------
 OSD_RESULT tOSD_Img2 (OSD_IMG_INFO *pInfor, OSD_UPDATE_TYP tMode)
 {
 	OSD_RESULT tFlag = OSD_LOCA_FAIL;
