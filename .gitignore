@@ -77,3 +77,5 @@ Desktop.ini
 *.lnk
 
 # Keep prebuilt .lib/.a, tool .exe/.dll, and resource .bin/.dat files.
+
+.vscode

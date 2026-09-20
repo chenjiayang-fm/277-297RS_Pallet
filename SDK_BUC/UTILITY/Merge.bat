@@ -86,6 +86,7 @@ SET /a PROFADDR=PROFSF*1024, PROFADDR+=40960
 if %1==510PF_BUC_CU_A7130 set result=true
 if %1==510PF_BUC_CU_RTC676x set result=true
 if %1==510PF_BUC_CU_S2019x set result=true
+if "%7"=="OSD" set result=true
 if "%result%" == "true" (
     goto MergeOSD
 )
@@ -151,7 +152,7 @@ SET FILESZ=0
 SET /A FILESZ=%PROFADDR%-40960+8192+%errorlevel%
 .\UTILITY\binModify .\BIN\temp2 %OSDIMGADDR% %FILESZ%
 del .\SYSTEM\OSD\temp1.bin
-copy /b .\BIN\temp2.bin+.\SYSTEM\OSD\OSD_Font_HD_90¢X.pat+.\SYSTEM\OSD\OSD_Image_WSVGA_0¢X.dat .\BIN\temp1.bin
+copy /b .\BIN\temp2.bin+.\SYSTEM\OSD\OSD_Font_HD_90¢X.pat+..\OSDImage.dat .\BIN\temp1.bin
 rem copy /b .\BIN\temp2.bin+.\SYSTEM\OSD\OSD_Font_HD_90¢X.pat+.\SYSTEM\OSD\OSD_Image_HD_90¢X.dat .\BIN\temp1.bin
 SET /a LOGOADDR=PROFADDR+12
 .\UTILITY\binConverter -gs .\BIN\temp1 %LOGOADDR%

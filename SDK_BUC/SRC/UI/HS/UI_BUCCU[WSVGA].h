@@ -70,6 +70,40 @@
 #define AI_Config_Ystep	   (tUI_CuSetting.tLanguage == LANGUAGE_CHINESE)?66:62
 #define VERSION_LEN 22
 
+// Reused OSD images: shared placement for drawing and touch.
+// Pairing / delete camera buttons (X and size come from PAIRCAM images).
+#define PAIRING_Y                    215
+#define PAIRING_Y_STEP               100
+
+// Camera sliders / highlight frames (X and size come from brightness images).
+#define CAMERA_SLIDER_Y              180
+#define CAMERA_HL_Y                  176
+#define CAMERA_Y_STEP                70
+
+// Date / time buttons (origin and size come from DATE_TIME_YEAR images).
+#define DATE_TIME_YEAR_DIST_X        130
+#define DATE_TIME_YEAR_DIST_Y        118
+
+// Trigger delay / priority numeric frames.
+#define TRIGGER_X                    220
+#define TRIGGER_Y                    200
+#define TRIGGER_X_STEP               140
+#define TRIGGER_Y_STEP               80
+
+// Auto scan switches / delay numeric frames.
+#define AUTOSCAN_SWITCH_X            240
+#define AUTOSCAN_SWITCH_Y            195
+#define AUTOSCAN_DELAY_X             340
+#define AUTOSCAN_DELAY_Y             185
+#define AUTOSCAN_X_STEP              420
+#define AUTOSCAN_Y_STEP              95
+
+// Parking line / guide line switches.
+#define PARKINGLINE_SWITCH_X         250
+#define PARKINGLINE_SWITCH_Y         215
+#define PARKINGLINE_X_STEP           400
+#define PARKINGLINE_Y_STEP           140
+
 #define COMMAND_LENGTH 7
 
 #if HDW277RS_000000 //Firmware Version for 277
