@@ -34,6 +34,7 @@
 #include "UART4AI.h"
 
 #define osUI_SIGNALS	0x66
+#define AI_LAMP_UNKNOWN 2 // 灯控应答失败时状态未知，下次继续同步开关状态。
 
 /**
  * Key event mapping table
@@ -72,7 +73,17 @@ UI_CamStatus_t tUI_CamStatus[CAM_4T];
 UI_CUSetting_t tUI_CuSetting;
 uint8_t ISPlaying_wav = 0;
 uint8_t Playwav_Flag = 0;
-uint32_t Playwav_Count = 0;
+volatile uint32_t Playwav_Count = 0;
+static uint8_t Playwav_Switch = 0;
+volatile uint8_t ubAIAlarmLevel[4] = {0};
+volatile uint16_t uwAIAlarmTimeout[4] = {0};
+volatile uint16_t uwAILampTimeout[4] = {0};
+static uint8_t ubAILaserState[4] = {0};
+static uint8_t ubAILedState[4] = {0};
+volatile uint8_t ubAIConfigSync = TRUE;
+static volatile uint16_t uwAIConfigSyncCount = 0;
+static osMutexId osAIConfigMutex;
+static osMutexId osUI_CamCmdMutex; // 共用 tosUI_Notify 的摄像头命令必须串行发送并等待应答。
 uint8_t tUI_RecCutOFF[4] = 0;
 //BSD RANGE
 //UI_ParkinglinePoint_t tUI_ParkinglinePoint[4]={0};
@@ -510,18 +521,19 @@ void UI_1MsTimer(void)
 		if(ulStartRecCompleteCount == 0)
 		osSemaphoreRelease(osUI_CuRecCtr);
 	}
-	if(Playwav_Flag)
+	// 毫秒回调只计时，音频播放和串口发送放到 UI 任务中执行。
+	if(Playwav_Count < PLAYWAV_COUNT)
+		Playwav_Count++;
+	if(uwAIConfigSyncCount)
+		uwAIConfigSyncCount--;
+	for(uint8_t i = 0; i < CAM_4T; i++)
 	{
-		Playwav_Count ++;
-		//printf("count :");
+		if(uwAIAlarmTimeout[i])
+			uwAIAlarmTimeout[i]--;
+		if(uwAILampTimeout[i])
+			uwAILampTimeout[i]--;
 	}
-	if(Playwav_Count >= 1300)
-	{
-		Playwav_Count = 0;
-		Playwav_Flag = 0;
-		//ADO_WavStop();
-		//printf("once wav play ok!!!\n");
-	}
+
 
 	if(ubZoomPairingFlag && ubZoomPairingCount)
 	{
@@ -616,6 +628,11 @@ void UI_OnInitDialog(void)
 //------------------------------------------------------------------------------
 void UI_StateReset(void)
 {
+	osMutexDef(AIConfigMutex);
+	osAIConfigMutex = osMutexCreate(osMutex(AIConfigMutex));
+	osMutexDef(UICamCmdMutex);
+	osUI_CamCmdMutex = osMutexCreate(osMutex(UICamCmdMutex));
+
 	osMutexDef(PlayVolumeFlag);
 	osPlayVolumeFlag 	= osMutexCreate(osMutex(PlayVolumeFlag));
 
@@ -1444,6 +1461,43 @@ void UI_DrawSdCardInfoIcon(void)
 
 }
 //------------------------------------------------------------------------------
+// FF CC：18 字节同时发送参数和四路算法选择，1126 仅在通道改变时重启。
+void UI_SendAIConfigTo1126(void)
+{
+	uint8_t ubData[18] = {0xFF, 0xCC};
+	uint8_t i, chn = CAM1;
+	uint8_t ubLength = sizeof(ubData);
+	uint16_t uwLine, uwCRC;
+	UI_PalletConfigInfo_t *pConfig;
+	for(i = 0; i < CAM_4T; i++)
+	{
+		ubData[12+i] = tUI_CamStatus[i].ubAIAlgorithm;
+		if(ubData[12+i] == AI_ALGORITHM_PALLET)
+			chn = i;
+	}
+	pConfig = &tUI_CamStatus[chn].tPalletConfig;
+	// 引导线按原协议使用 1024x600 坐标，由 1126 换算到算法图像。
+	uwLine = (tUI_CuSetting.GuideLine_XY[chn][2] << 8) + tUI_CuSetting.GuideLine_XY[chn][3] + 2;
+	ubData[2] = ubLength;
+	ubData[3] = chn;
+	ubData[4] = uwLine & 0xFF;
+	ubData[5] = uwLine >> 8;
+	ubData[6] = pConfig->tDelayTurnOFF;
+	ubData[7] = pConfig->tFlowFrameInterval;
+	ubData[8] = pConfig->tRateRange;
+	ubData[9] = pConfig->tFlowPauseDuration;
+	ubData[10] = pConfig->tFlowRunDuration;
+	ubData[11] = pConfig->tDectability;
+	uwCRC = crc16_Gen((char *)&ubData[2], ubLength - 4);
+	ubData[ubLength-2] = uwCRC & 0xFF;
+	ubData[ubLength-1] = uwCRC >> 8;
+	osMutexWait(osAIConfigMutex, osWaitForever);
+	for(i = 0; i < ubLength; i++)
+		UI_UART2_PutChar(ubData[i]);
+	osMutexRelease(osAIConfigMutex);
+	uwAIConfigSyncCount = 1000;
+}
+
 void UI_SendBSDRangeTo1126(UI_ParkinglinePoint_t tParkinglinePoint,uint8_t chn)
 {
 	uint8_t BSDRangeDate[24];
@@ -1501,6 +1555,7 @@ void UI_SendBSDRangeTo1126(UI_ParkinglinePoint_t tParkinglinePoint,uint8_t chn)
 		printf("crc is %x\n",CRCtemp);
 		BSDRangeDate[18] = CRCtemp&0x00FF;
 		BSDRangeDate[19] = (CRCtemp>>8)&0x00FF;
+		osMutexWait(osAIConfigMutex, osWaitForever);
 		UI_UART2_PutChar(0XFF);
 		UI_UART2_PutChar(0XBB); 
 		for(uint8_t i=0; i < 20;i++) 	
@@ -1508,6 +1563,8 @@ void UI_SendBSDRangeTo1126(UI_ParkinglinePoint_t tParkinglinePoint,uint8_t chn)
 			UI_UART2_PutChar(BSDRangeDate[i]);
 			//printf("BSDRangeDate[%d] = %x!!!\n",i,BSDRangeDate[i]);
 		}
+
+		osMutexRelease(osAIConfigMutex);
 
 #endif
 }
@@ -2367,6 +2424,7 @@ void UI_ClearCarFlag(uint8_t chn)
 		}
 	}
 
+	// 车辆和栈板共用图标位置，两组资源均为 50x50 / 25x25。
 	OSD_EraserImg2_NoUpdate(&tImgInfor);
 }
 
@@ -2727,7 +2785,7 @@ void UI_EventDrawBox(Algo_Result showBox)
 {
 	OSD_IMG_INFO tArea, tBox;
 	static uint8_t LoadJpegFlag = 0;
-	static OSD_IMG_INFO tPD_OsdImagInfo[2],tCD_OsdImagInfo[2];
+	static OSD_IMG_INFO tPD_OsdImagInfo[2],tCD_OsdImagInfo[2],tPallet_OsdImagInfo[2];
 
 	if(showBox.chn >= 4)
 		return;
@@ -2742,6 +2800,7 @@ void UI_EventDrawBox(Algo_Result showBox)
 	{
 		tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_PERSON_DETECUED_FLAG, 2, &tPD_OsdImagInfo[0]);
 		tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_Car_DETECUED_FLAG, 2, &tCD_OsdImagInfo[0]);
+		tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_PALLET_DETECTED_FLAG, 2, &tPallet_OsdImagInfo[0]);
 		LoadJpegFlag = 1;
 	}
 
@@ -2764,19 +2823,15 @@ void UI_EventDrawBox(Algo_Result showBox)
 	}
 	Drawing_BoxFlag[showBox.chn] = 0;
 
-	if(showBox.P_OR_C == 3)
-	{			
-		UI_DrawPersonFlag(showBox.chn,tPD_OsdImagInfo);
-		UI_DrawCarFlag(showBox.chn,tCD_OsdImagInfo);
-	}
-	else if(showBox.P_OR_C == 1)
-	{			
-		UI_DrawPersonFlag(showBox.chn,tPD_OsdImagInfo);
-	}
-	else if(showBox.P_OR_C == 2)
-	{			
-		UI_DrawCarFlag(showBox.chn,tCD_OsdImagInfo);
-	}
+	// 每帧先清除旧标志，避免目标类别改变后留下上一次图标。
+	UI_ClearPersonFlag(showBox.chn);
+	UI_ClearCarFlag(showBox.chn);
+	if(showBox.P_OR_C & 0x01)
+		UI_DrawPersonFlag(showBox.chn, tPD_OsdImagInfo);
+	if(showBox.P_OR_C & 0x04)
+		UI_DrawCarFlag(showBox.chn, tPallet_OsdImagInfo);
+	else if(showBox.P_OR_C & 0x02)
+		UI_DrawCarFlag(showBox.chn, tCD_OsdImagInfo);
 
 	osMutexRelease(osEnterVolumeFlag);
 }
@@ -3000,14 +3055,79 @@ void UI_CheckAIVersion(void)
 		if(!KNL_UsbdFwuFg && strlen(receivedVersion) == 0)
 		{
 			printf("UI_CheckAIVersion\n");
+			osMutexWait(osAIConfigMutex, osWaitForever);
 			UI_UART2_PutChar(0XFF);
 			UI_UART2_PutChar(0XDD);
+			osMutexRelease(osAIConfigMutex);
 		}
 	}
 	count++;
 }
 
 //------------------------------------------------------------------------------
+// 各通道独立保存报警等级，取最高等级播放，空帧只清除本通道。
+static void UI_UpdateAIAlarm(void)
+{
+	uint8_t i, ubLevel = 0;
+	for(i = 0; i < CAM_4T; i++)
+	{
+		if(uwAIAlarmTimeout[i] && tUI_CamStatus[i].tCamConnSts == CAM_ONLINE &&
+			(tUI_CamStatus[i].ubAIAlgorithm == AI_ALGORITHM_PALLET ||
+			(tUI_CuSetting.ubIsEnableBSDALARM[i] &&
+			(tUI_CuSetting.ubDetectPeopleFlag[i] || tUI_CuSetting.ubDetectCarFlag[i]))) &&
+			ubAIAlarmLevel[i] > ubLevel)
+			ubLevel = ubAIAlarmLevel[i];
+	}
+	if(MenuOnFlag || ubUI_CuPowerDiscFlag || ubUI_CuStandbyFlag || KNL_UsbdFwuFg || ubAIConfigSync)
+		ubLevel = 0;
+	if(ubLevel == 0)
+	{
+		if(Playwav_Flag)
+			ADO_WavStop();
+		Playwav_Flag = 0;
+		return;
+	}
+	if(!Playwav_Flag || Playwav_Switch != ubLevel - 1)
+		Playwav_Count = PLAYWAV_COUNT;
+	Playwav_Switch = ubLevel - 1;
+	Playwav_Flag = 1;
+	if(Playwav_Count >= PLAYWAV_COUNT && tADO_GetWavState() == ADO_WAV_IDLE)
+	{
+		ADO_WavPlay(Playwav_Switch);
+		Playwav_Count = 0;
+	}
+}
+
+//------------------------------------------------------------------------------
+// 独立灯控任务检查最新状态；摄像头命令通过共用互斥锁与菜单命令串行。
+void UI_UpdateAILamp(void)
+{
+	uint8_t i;
+	UI_CUReqCmd_t tCamSetCmd;
+	if(!ubUI_CuStartUpFlag)
+		return;
+	tCamSetCmd.ubCmd[UI_TWC_TYPE] = UI_SETTING;
+	tCamSetCmd.ubCmd[UI_SETTING_ITEM] = UI_IMGPROC_SETTING;
+	tCamSetCmd.ubCmd_Len = 4;
+	for(i = 0; i < CAM_4T; i++)
+	{
+		// 切回 BSD、待机或算法重新同步时，撤销该路临时开灯请求。
+		if(tUI_CamStatus[i].ubAIAlgorithm != AI_ALGORITHM_PALLET ||
+			tUI_CamStatus[i].tCamConnSts != CAM_ONLINE || ubAIConfigSync ||
+			ubUI_CuPowerDiscFlag || ubUI_CuStandbyFlag || KNL_UsbdFwuFg)
+			uwAILampTimeout[i] = 0;
+		if(tUI_CamStatus[i].tCamConnSts != CAM_ONLINE ||
+			!UI_CheckTxVersion(tUI_CamStatus[i].cCamVersion,30,Laserchar,3))
+			continue;
+		tCamSetCmd.tDS_CamNum = (UI_CamNum_t)i;
+		// 发送函数取得共用互斥锁后，重新计算最新开关状态并更新已确认状态。
+		if(UI_SendLaserorLedToCAM(osThreadGetId(), &tCamSetCmd, TWC_Laser_CTRL) != rUI_SUCCESS)
+			printf("AI LASER Setting Fail: chn=%u\n", i);
+		if(UI_SendLaserorLedToCAM(osThreadGetId(), &tCamSetCmd, TWC_Led_CTRL) != rUI_SUCCESS)
+			printf("AI LED Setting Fail: chn=%u\n", i);
+	}
+}
+
 void UI_UpdateStatus(uint16_t *pThreadCnt)
 {
 	if(!ubUI_CuStartUpFlag)
@@ -3045,6 +3165,9 @@ void UI_UpdateStatus(uint16_t *pThreadCnt)
 //		ISPlaying_wav = 0;
 //		ADO_WavStop();
 //	}
+	UI_UpdateAIAlarm();
+	if(ubAIConfigSync && !uwAIConfigSyncCount && !KNL_UsbdFwuFg)
+		UI_SendAIConfigTo1126();
 	UI_UpdateRecStsIcon();
 	UI_UpdateWarningNoteIcon();
 	//paly time
@@ -4383,6 +4506,39 @@ UI_Result_t UI_SendLaserorLedToCAM(osThreadId thread_id, UI_CUReqCmd_t *ptReqCmd
 	osEvent tReq_Event;
 	APP_StaNumMap_t *pUI_CamNumMap = APP_GetSTANumMappingTable(ptReqCmd->tDS_CamNum);
 	uint8_t ubUI_TwcRetry = 5;
+	uint8_t *pubLampState = NULL;
+	UI_CamNum_t tCamNum = ptReqCmd->tDS_CamNum;
+
+	osMutexWait(osUI_CamCmdMutex, osWaitForever);
+	if(thread_id == osUI_AILampThreadId)
+	{
+		pubLampState = (Opc == TWC_Laser_CTRL)?&ubAILaserState[tCamNum]:&ubAILedState[tCamNum];
+		// 等锁期间菜单可能已改为常开，此时让手动设置接管，不能发送自动关灯。
+		if((Opc == TWC_Laser_CTRL && tUI_CamStatus[tCamNum].tCamLaser == CAMLASER_ENABLE) ||
+			(Opc == TWC_Led_CTRL && tUI_CamStatus[tCamNum].tCamLed == CAMLED_ENABLE))
+		{
+			*pubLampState = FALSE;
+			osMutexRelease(osUI_CamCmdMutex);
+			return rUI_SUCCESS;
+		}
+		if(tUI_CamStatus[tCamNum].tCamConnSts != CAM_ONLINE ||
+			!UI_CheckTxVersion(tUI_CamStatus[tCamNum].cCamVersion,30,Laserchar,3))
+		{
+			osMutexRelease(osUI_CamCmdMutex);
+			return rUI_FAIL;
+		}
+		// 等锁后再读倒计时与算法选择，避免发出已过期或旧通道的开灯命令。
+		ptReqCmd->ubCmd[UI_SETTING_DATA+1] = uwAILampTimeout[tCamNum] &&
+			tUI_CamStatus[tCamNum].ubAIAlgorithm == AI_ALGORITHM_PALLET &&
+			!ubAIConfigSync && !ubUI_CuPowerDiscFlag && !ubUI_CuStandbyFlag && !KNL_UsbdFwuFg;
+		if(*pubLampState == ptReqCmd->ubCmd[UI_SETTING_DATA+1])
+		{
+			osMutexRelease(osUI_CamCmdMutex);
+			return rUI_SUCCESS;
+		}
+	}
+	// 清掉本任务上一次命令遗留的应答；不使用灯控唤醒信号位。
+	osSignalWait(osUI_SIGNALS, 0);
 
 	tosUI_Notify.thread_id = thread_id;
 	tosUI_Notify.iSignals  = osUI_SIGNALS;
@@ -4401,18 +4557,32 @@ UI_Result_t UI_SendLaserorLedToCAM(osThreadId thread_id, UI_CUReqCmd_t *ptReqCmd
 	{
 		tTWC_StopTwcSend(pUI_CamNumMap->tTWC_StaNum, Opc);
 		tosUI_Notify.thread_id = NULL;
+		if(pubLampState)
+			*pubLampState = AI_LAMP_UNKNOWN;
+		osMutexRelease(osUI_CamCmdMutex);
 		return rUI_FAIL;
 	}
 	if(tosUI_Notify.thread_id != NULL)
 	{
 		tReq_Event = osSignalWait(tosUI_Notify.iSignals, UI_TWC_TIMEOUT);
 		printf("tReq_Event.status = %d tReq_Event.value.signals = %d tosUI_Notify.iSignals = %d tosUI_Notify.tReportSts = %d\n", tReq_Event.status, tReq_Event.value.signals, tosUI_Notify.iSignals, tosUI_Notify.tReportSts);
-		tReq_Result = (tReq_Event.status == osEventSignal)?(tReq_Event.value.signals == tosUI_Notify.iSignals)?tosUI_Notify.tReportSts:rUI_FAIL:rUI_FAIL;
+		tReq_Result = (tReq_Event.status == osEventSignal)?((tReq_Event.value.signals & tosUI_Notify.iSignals) == tosUI_Notify.iSignals)?tosUI_Notify.tReportSts:rUI_FAIL:rUI_FAIL;
 		tTWC_StopTwcSend(pUI_CamNumMap->tTWC_StaNum, Opc);
 		tosUI_Notify.thread_id  = NULL;
 		tosUI_Notify.iSignals   = NULL;
 		tosUI_Notify.tReportSts = rUI_SUCCESS;
 	}
+	// 状态与命令共用一把锁，避免菜单关灯与算法状态回写交错。
+	if(pubLampState)
+		*pubLampState = (tReq_Result == rUI_SUCCESS)?ptReqCmd->ubCmd[UI_SETTING_DATA+1]:AI_LAMP_UNKNOWN;
+	else if(tReq_Result == rUI_SUCCESS)
+	{
+		if(Opc == TWC_Laser_CTRL)
+			ubAILaserState[tCamNum] = FALSE;
+		else if(Opc == TWC_Led_CTRL)
+			ubAILedState[tCamNum] = FALSE;
+	}
+	osMutexRelease(osUI_CamCmdMutex);
 	return tReq_Result;
 }
 
@@ -4425,6 +4595,9 @@ UI_Result_t UI_SendRequestToCAM(osThreadId thread_id, UI_CUReqCmd_t *ptReqCmd)
 	APP_StaNumMap_t *pUI_CamNumMap = APP_GetSTANumMappingTable(ptReqCmd->tDS_CamNum);
 	uint8_t ubUI_TwcRetry = 5;
 
+	// 与独立灯控任务共用发送及应答上下文，锁一直持有到本次事务结束。
+	osMutexWait(osUI_CamCmdMutex, osWaitForever);
+	osSignalWait(osUI_SIGNALS, 0);
 	tosUI_Notify.thread_id = thread_id;
 	tosUI_Notify.iSignals  = osUI_SIGNALS;
 	while(--ubUI_TwcRetry)
@@ -4437,18 +4610,20 @@ UI_Result_t UI_SendRequestToCAM(osThreadId thread_id, UI_CUReqCmd_t *ptReqCmd)
 	{
 		tTWC_StopTwcSend(pUI_CamNumMap->tTWC_StaNum, TWC_UI_SETTING);
 		tosUI_Notify.thread_id = NULL;
+		osMutexRelease(osUI_CamCmdMutex);
 		return rUI_FAIL;
 	}
 	if(tosUI_Notify.thread_id != NULL)
 	{
 		tReq_Event = osSignalWait(tosUI_Notify.iSignals, UI_TWC_TIMEOUT);
 		printf("tReq_Event.status = %d tReq_Event.value.signals = %d tosUI_Notify.iSignals = %d tosUI_Notify.tReportSts = %d\n", tReq_Event.status, tReq_Event.value.signals, tosUI_Notify.iSignals, tosUI_Notify.tReportSts);
-		tReq_Result = (tReq_Event.status == osEventSignal)?(tReq_Event.value.signals == tosUI_Notify.iSignals)?tosUI_Notify.tReportSts:rUI_FAIL:rUI_FAIL;
+		tReq_Result = (tReq_Event.status == osEventSignal)?((tReq_Event.value.signals & tosUI_Notify.iSignals) == tosUI_Notify.iSignals)?tosUI_Notify.tReportSts:rUI_FAIL:rUI_FAIL;
 		tTWC_StopTwcSend(pUI_CamNumMap->tTWC_StaNum, TWC_UI_SETTING);
 		tosUI_Notify.thread_id  = NULL;
 		tosUI_Notify.iSignals   = NULL;
 		tosUI_Notify.tReportSts = rUI_SUCCESS;
 	}
+	osMutexRelease(osUI_CamCmdMutex);
 	return tReq_Result;
 }
 //------------------------------------------------------------------------------
@@ -4551,8 +4726,8 @@ void UI_ResetUIParameter(void)
 		tUI_CamStatus[tCamNum].tPalletConfig.tDelayTurnOFF = 6;
 		tUI_CamStatus[tCamNum].tPalletConfig.tFlowFrameInterval = 0;
 		tUI_CamStatus[tCamNum].tPalletConfig.tRateRange = 2;
-		tUI_CamStatus[tCamNum].tPalletConfig.tFlowPauseDuration = 0;
-		tUI_CamStatus[tCamNum].tPalletConfig.tFlowRunDuration = 10;
+		tUI_CamStatus[tCamNum].tPalletConfig.tFlowPauseDuration = 3;
+		tUI_CamStatus[tCamNum].tPalletConfig.tFlowRunDuration = 1;
 		tUI_CamStatus[tCamNum].tPalletConfig.tDectability = 52;
 		tUI_CamStatus[tCamNum].ubAIConfigVersion = UI_AI_CONFIG_VERSION;
 		
@@ -4743,6 +4918,7 @@ uint8_t UI_CheckUIParameter(void)
 {
 	UI_CamNum_t tCamNum;
 	uint8_t ubAIConfigUpdate = FALSE;
+	uint8_t ubPalletSelected = FALSE;
 	for(tCamNum = CAM1; tCamNum < CAM_4T; tCamNum++)
 	{	
 		UI_CHK_MYSYS(tUI_CamStatus[tCamNum].tCamDispLocation_Quad,DISP_LOWER_RIGHT + 1,DISP_UPPER_LEFT);
@@ -4788,11 +4964,22 @@ uint8_t UI_CheckUIParameter(void)
 			tUI_CamStatus[tCamNum].tPalletConfig.tDelayTurnOFF = 6;
 			tUI_CamStatus[tCamNum].tPalletConfig.tFlowFrameInterval = 0;
 			tUI_CamStatus[tCamNum].tPalletConfig.tRateRange = 2;
-			tUI_CamStatus[tCamNum].tPalletConfig.tFlowPauseDuration = 0;
-			tUI_CamStatus[tCamNum].tPalletConfig.tFlowRunDuration = 10;
+			tUI_CamStatus[tCamNum].tPalletConfig.tFlowPauseDuration = 3;
+			tUI_CamStatus[tCamNum].tPalletConfig.tFlowRunDuration = 1;
 			tUI_CamStatus[tCamNum].tPalletConfig.tDectability = 52;
 			tUI_CamStatus[tCamNum].ubAIConfigVersion = UI_AI_CONFIG_VERSION;
 			ubAIConfigUpdate = TRUE;
+		}
+
+		// 兼容已保存的旧配置：保留第一个栈板通道，其余恢复 BSD。
+		if(tUI_CamStatus[tCamNum].ubAIAlgorithm == AI_ALGORITHM_PALLET)
+		{
+			if(ubPalletSelected)
+			{
+				tUI_CamStatus[tCamNum].ubAIAlgorithm = AI_ALGORITHM_BSD;
+				ubAIConfigUpdate = TRUE;
+			}
+			ubPalletSelected = TRUE;
 		}
 
 	

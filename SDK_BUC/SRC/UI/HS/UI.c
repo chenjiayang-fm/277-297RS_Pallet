@@ -51,6 +51,10 @@ osMessageQId *pAPP_MessageQH;
 static void PwrCtl_Thread(void);
 static void UI_Thread(void const *argument);
 static void UI_EventThread(void const *argument);
+#ifdef BSP_D_SNCC71_GM8285C_RX_V2
+osThreadId osUI_AILampThreadId;
+static void UI_AILampThread(void const *argument);
+#endif
 static void UI_AI_clearBOXThread(void const *argument);
 static void UI_AIBOXThread0(void const *argument);
 static void UI_AIBOXThread1(void const *argument);
@@ -92,6 +96,10 @@ void UI_Init(osMessageQId *pvMsgQId)
 
 	osThreadDef(UI_EventThread, UI_EventThread, osPriorityAboveNormal, 1, THREAD_STACK_UIEVENT_HANDLER);
 	osThreadCreate(osThread(UI_EventThread), NULL);
+#ifdef BSP_D_SNCC71_GM8285C_RX_V2
+	osThreadDef(UI_AILampThread, UI_AILampThread, osPriorityAboveNormal, 1, 2048);
+	osUI_AILampThreadId = osThreadCreate(osThread(UI_AILampThread), NULL);
+#endif
 	//draw box
 	osThreadDef(UI_AIBOXThread0, UI_AIBOXThread0, osPriorityNormal, 1, 2048);
 	osThreadCreate(osThread(UI_AIBOXThread0), NULL);
@@ -326,10 +334,22 @@ static void UI_EventThread(void const *argument)
 	UI_Event_t tUI_Event;
 	while(1)
 	{
-        osMessageGet(UI_EventQueue, &tUI_Event, osWaitForever);
-		UI_EventHandles(&tUI_Event);
+		if(osMessageGet(UI_EventQueue, &tUI_Event, osWaitForever) == osEventMessage)
+			UI_EventHandles(&tUI_Event);
 	}
 }
+//------------------------------------------------------------------------------
+#ifdef BSP_D_SNCC71_GM8285C_RX_V2
+static void UI_AILampThread(void const *argument)
+{
+	while(1)
+	{
+		// 新的开灯请求用信号唤醒；断流时最多等待 50 ms，再检查关灯倒计时。
+		osSignalWait(UI_AI_LAMP_SIGNAL, 50);
+		UI_UpdateAILamp();
+	}
+}
+#endif
 //------------------------------------------------------------------------------
 static void UI_AIBOXThread0(void const *argument)
 {

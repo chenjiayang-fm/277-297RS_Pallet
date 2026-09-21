@@ -64,6 +64,20 @@
 //#define POINT_CHOOSE_MODE  0
 //#define POINT_MOVE_MODE    1
 //#define POINT_INDEX_MAX    8
+// 通道算法选择：仅确认后修改并同步，参数设置不触发重启。
+#define AI_ALGORITHM_BSD       0
+#define AI_ALGORITHM_PALLET    1
+#define PLAYWAV_COUNT          1000
+#define AI_LAMP_HOLD_TIME      300 // 光流开灯标志停止刷新后，延时关灯（毫秒）。
+extern volatile uint8_t ubAIConfigSync;
+extern volatile uint8_t ubAIAlarmLevel[4];
+extern volatile uint16_t uwAIAlarmTimeout[4];
+extern volatile uint16_t uwAILampTimeout[4];
+#define UI_AI_LAMP_SIGNAL     0x100 // 独立灯控任务唤醒信号，与摄像头应答 0x66 分开。
+extern osThreadId osUI_AILampThreadId;
+void UI_UpdateAILamp(void);
+void UI_SendAIConfigTo1126(void);
+
 #define AI_PAGE_ALGORITHM      0
 #define AI_PAGE_BSD            1
 #define AI_PAGE_PALLET         2
@@ -85,11 +99,11 @@
 #define AI_PALLET_RATE_RANGE_MAX           6
 #define AI_PALLET_RATE_RANGE_STEP          1
 #define AI_PALLET_FLOW_PAUSE_DURATION_MIN  0
-#define AI_PALLET_FLOW_PAUSE_DURATION_MAX  50
-#define AI_PALLET_FLOW_PAUSE_DURATION_STEP 5
-#define AI_PALLET_FLOW_RUN_DURATION_MIN    10
-#define AI_PALLET_FLOW_RUN_DURATION_MAX    30
-#define AI_PALLET_FLOW_RUN_DURATION_STEP   5
+#define AI_PALLET_FLOW_PAUSE_DURATION_MAX  5
+#define AI_PALLET_FLOW_PAUSE_DURATION_STEP 1
+#define AI_PALLET_FLOW_RUN_DURATION_MIN    1
+#define AI_PALLET_FLOW_RUN_DURATION_MAX    5
+#define AI_PALLET_FLOW_RUN_DURATION_STEP   1
 #define AI_PALLET_SENSITIVITY_MIN          0
 #define AI_PALLET_SENSITIVITY_MAX          99
 #define AI_PALLET_SENSITIVITY_STEP         1

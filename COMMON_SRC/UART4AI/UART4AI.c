@@ -38,6 +38,7 @@ typedef enum
 	UART4AI_STATE_GET_RSENDI_OR_BSDRANGE,
 	UART4AI_STATE_GET_UPGRADE,
 	UART4AI_STATE_GET_VERSON,
+	UART4AI_STATE_GET_MODEL_ACK,
 } eHandleUART4AIState;
 
 static const unsigned short crc16Table[256] = {
@@ -118,21 +119,44 @@ void handleUart4ai(char data[], int length)
 	static uint8_t dropFram = 0;	
     UI_Event_t tDrawBoxEvent;
 
-	targetChn = (uint32_t)data[0];
-	targetP_OR_C = (uint32_t)data[1];
-	targetNum = (uint32_t)data[2];
+	targetChn = (uint8_t)data[0];
+	targetP_OR_C = (uint8_t)data[1] & 0x07; // 低三位分别表示人、车、栈板。
+	targetNum = (uint8_t)data[2];
 	
-	if(targetChn > 4)
+	if(targetChn >= CAM_4T || targetNum > DATA_LENGTH_MAX || length < 3 + targetNum*9)
 	{
-		Drawing_BoxFlag[targetChn] = 0;
 		printf("chn recive error!!!!!!!!!!!\n");
 		return;
 	}
+	// 所有目标取最高报警等级；每路独立刷新，防止其他通道的空帧打断声音。
+	uint8_t ubLevel = 0;
+	for(index = 0; index < targetNum; index++)
+	{
+		uint8_t ubAlarm = (uint8_t)data[11+index*9] & 0x0F;
+		if(ubAlarm <= 3 && ubAlarm > ubLevel)
+			ubLevel = ubAlarm;
+	}
+	// CRC 已由接收状态机校验。零目标帧也可能要求开灯，不能依赖目标数量。
+	// 只刷新有效 Pallet 通道；bit4 清零时不续时，沿用旧工程的延时关灯行为。
+	if(tUI_CamStatus[targetChn].ubAIAlgorithm == AI_ALGORITHM_PALLET &&
+		!ubAIConfigSync && ((uint8_t)data[1] & 0x10))
+	{
+		uint8_t ubWakeLamp = (uwAILampTimeout[targetChn] == 0);
+		uwAILampTimeout[targetChn] = AI_LAMP_HOLD_TIME;
+		// 首次开灯或超时后重新开灯才唤醒；连续开灯帧只续时，避免逐帧唤醒。
+		if(ubWakeLamp)
+			osSignalSet(osUI_AILampThreadId, UI_AI_LAMP_SIGNAL);
+	}
+	ubAIAlarmLevel[targetChn] = ubLevel;
+	uwAIAlarmTimeout[targetChn] = ubLevel ? 1000 : 0;
+	if(MenuOnFlag)
+		return;
 //	if(tUI_CuSetting.ubIsEnableBSD[targetChn] == 0)
 //	{
 //		return;
 //	}
-	if(tUI_CuSetting.ubDetectPeopleFlag[targetChn] == 0 && tUI_CuSetting.ubDetectCarFlag[targetChn] == 0 )
+	if(tUI_CamStatus[targetChn].ubAIAlgorithm == AI_ALGORITHM_BSD &&
+		tUI_CuSetting.ubDetectPeopleFlag[targetChn] == 0 && tUI_CuSetting.ubDetectCarFlag[targetChn] == 0)
 	{
 		Drawing_BoxFlag[targetChn] = 0;
 		return;
@@ -248,12 +272,11 @@ uint8_t handleEptTarget[4] = {0};
 uint8_t Reboot_Flag = 0;
 uint8_t md5x01_getflag = 0,sdkx04getflag = 0;
 //extern UI_ParkinglinePoint_t tUI_ParkinglinePoint[4];
-extern uint8_t Playwav_Flag;
-extern uint32_t Playwav_Count;
 
 static void UART4AI_RecvThread(void const *argument)
 {
-	uint8_t ch,MD5_ErrorCount_Flag;
+	uint8_t ch,cmd,MD5_ErrorCount_Flag = 0;
+	uint8_t ubModelAck[6], ubModelAckIdx = 0;
 	static int targetNum = 0, indexRecv = 0;
 	uint16_t crcRecv;
 	static uint8_t ErrorCount= 0;
@@ -324,6 +347,7 @@ static void UART4AI_RecvThread(void const *argument)
 						if ((ch > CAM4) || (ch < CAM1))
 						{
 							state = UART4AI_STATE_CHECK_0XFF;
+							break;
 						}
 						state = UART4AI_STATE_GET_RSENDI_OR_BSDRANGE;
 						break;
@@ -331,33 +355,14 @@ static void UART4AI_RecvThread(void const *argument)
 					//FFBB0x（x是通道号）添加判断需要重发i帧的通道。
 /***************************RSENDI_OR_BSDRANGE*******************************/
 				case UART4AI_STATE_GET_RSENDI_OR_BSDRANGE:
-					receivedData[1] = ch;
-					if(receivedData[1] == 0)
-					{				
-						//添加重发I帧的操作
+					cmd = ch; // 当前字节是命令号，通道号已保存在 receivedData[0]。
+					if(cmd == 0)
 						ResendI_handle(receivedData[0]);
-						state = UART4AI_STATE_CHECK_0XFF;
-					}
-					else if(receivedData[1] == 1)
-					{
-						//添加检测区域发送操作
-						switch(receivedData[0])
-						{
-							case 0:
-								UI_SendBSDRangeTo1126(tUI_CuSetting.tUI_AIDetectlinePoint[0],receivedData[0]);
-								break;
-							case 1:
-								UI_SendBSDRangeTo1126(tUI_CuSetting.tUI_AIDetectlinePoint[1],receivedData[0]);
-								break;
-							case 2:
-								UI_SendBSDRangeTo1126(tUI_CuSetting.tUI_AIDetectlinePoint[2],receivedData[0]);
-								break;
-							case 3:
-								UI_SendBSDRangeTo1126(tUI_CuSetting.tUI_AIDetectlinePoint[3],receivedData[0]);
-								break;
-						}
-						state = UART4AI_STATE_CHECK_0XFF;
-					}
+					else if(cmd == 1)
+						UI_SendBSDRangeTo1126(tUI_CuSetting.tUI_AIDetectlinePoint[receivedData[0]], receivedData[0]);
+					else if(cmd == 2)
+						ubAIConfigSync = TRUE; // 1126 每次启动都请求完整配置，由 UI 任务发送。
+					state = UART4AI_STATE_CHECK_0XFF;
 					break;
 /***************************RSENDI_OR_BSDRANGE***********************************/
 
@@ -369,6 +374,11 @@ static void UART4AI_RecvThread(void const *argument)
 					//发送md5码
 					switch(ch)
 					{
+						case 0x08: // 配置应答总长 8，不能按升级命令处理后续字节。
+							ubModelAck[0] = ch;
+							ubModelAckIdx = 1;
+							state = UART4AI_STATE_GET_MODEL_ACK;
+							break;
 						case 0x00: //请求MD5
 							printf("return md5 ack1111111!!!!!!!!\n");
 							UART2_PutChar(0xFF);
@@ -462,6 +472,24 @@ static void UART4AI_RecvThread(void const *argument)
 /***************************UPGRADE******************************************/
 #endif
 
+				case UART4AI_STATE_GET_MODEL_ACK:
+					ubModelAck[ubModelAckIdx++] = ch;
+					if(ubModelAckIdx == sizeof(ubModelAck))
+					{
+						uint8_t i, ubMask = 0;
+						for(i = 0; i < CAM_4T; i++)
+							if(tUI_CamStatus[i].ubAIAlgorithm == AI_ALGORITHM_PALLET)
+								ubMask |= 1 << i;
+						if(checkCRCReceiveData((char *)ubModelAck, 4, ubModelAck[4] | (ubModelAck[5] << 8)) && ubModelAck[2] == ubMask)
+						{
+							if(ubModelAck[3] <= 1)
+								ubAIConfigSync = FALSE;
+							printf("AI config ack: mask=%u status=%u\n", ubMask, ubModelAck[3]);
+						}
+						state = UART4AI_STATE_CHECK_0XFF;
+					}
+					break;
+
 #if 1 // 包头为FFAA的响应代码
 				case UART4AI_STATE_GET_TARGET_CHANNAL_AA:
 					receivedData[0] = ch;
@@ -470,6 +498,7 @@ static void UART4AI_RecvThread(void const *argument)
 					if ((ch > CAM4) || (ch < CAM1))
 					{
 						state = UART4AI_STATE_CHECK_0XFF;
+						break;
 					}
 					state = UART4AI_STATE_GET_TARGET_P_OR_C;
 					break;
@@ -477,9 +506,11 @@ static void UART4AI_RecvThread(void const *argument)
 				case UART4AI_STATE_GET_TARGET_P_OR_C:
 					receivedData[1] = ch;
 				//	printf("receivedData is :%d\n",receivedData[1]);
-					if ((ch > 3) || (ch < 0))//1:仅人 2：仅车 3：人车 
+					// bit4 是灯控标志；低三位可同时包含人、车和栈板。
+					if(ch & 0xE8)
 					{
 						state = UART4AI_STATE_CHECK_0XFF;
+						break;
 					}
 					state = UART4AI_STATE_GET_TARGET_NUMBER;
 					break;
@@ -491,22 +522,16 @@ static void UART4AI_RecvThread(void const *argument)
 					targetNum = (int)receivedData[2];
 					indexRecv = 3;
 					if (targetNum == 0)
-                    {
-                    	if (handleEptTarget[receivedData[0]] == 0)
-                    	{
-                    		//printf("into handleUart4ai :ch:%d,targetNum:%d!!!!!!!!!!!\n",receivedData[0],receivedData[2]);
-                    		handleUart4ai(receivedData, indexRecv);	
-							handleEptTarget[receivedData[0]] = 1;
-						}
-                    	state = UART4AI_STATE_CHECK_0XFF;
+					{
+						// 空目标帧也有 CRC，校验通过后才停止本通道报警。
+						state = UART4AI_STATE_CRC1;
 						break;
-                    }
+					}
 					else if (targetNum > DATA_LENGTH_MAX)
 					{
 						targetNum = 0;
 						receivedData[2] = DATA_LENGTH_MAX;
 						state = UART4AI_STATE_CHECK_0XFF;
-						handleUart4ai(receivedData, indexRecv);
 						printf("UART4AI_STATE_GET_TARGET_NUMBER targetNum > DATA_LENGTH_MAX\n");
 						break;
 					}
@@ -537,24 +562,9 @@ static void UART4AI_RecvThread(void const *argument)
 					if (checkCRCReceiveData(receivedData, indexRecv, crcRecv))
 					{
 					
-						if(Playwav_Flag == 0 && tUI_CuSetting.ubIsEnableBSDALARM[receivedData[0]] == 1 &&(tUI_CuSetting.ubDetectPeopleFlag[receivedData[0]] == 1 ||tUI_CuSetting.ubDetectCarFlag[receivedData[0]] == 1 ) )//&& tUI_CuSetting.ubIsEnableBSD[receivedData[0]] == 1)
-						{
-							Playwav_Flag = 1;
-							Playwav_Count = 0;
-							ADO_WavPlay(0);
-						//	printf("play once wav!!!\n");
-						}
-						if(MenuOnFlag == TRUE)
-						{
-							;//printf("menu on quit draw box!!!!!!!!\n");
-							
-						}
-						else
-						{
-							handleUart4ai(receivedData, indexRecv);		
-						}
-							
+						handleUart4ai((char *)receivedData, indexRecv);
 					}
+
 					state = UART4AI_STATE_CHECK_0XFF;
 					break;
 #endif

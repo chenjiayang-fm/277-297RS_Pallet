@@ -1501,6 +1501,14 @@ void UI_GuideLineSubSubSubMenuPageExit(void)
 	uint16_t uwSubSubMenuItemIdx = 
 			(uint16_t)tSettingSubSubMenuItem.tSettingS[GUIDELINE_ITEM].tSubMenuInfo.ubItemIdx;//sub sub
 
+	// 栈板使用当前通道引导线，标定退出时连同已确认的通道选择同步。
+	if(tUI_CamStatus[uwSubSubMenuItemIdx/2].ubAIAlgorithm == AI_ALGORITHM_PALLET)
+	{
+		UI_UpdateDevStatusInfo();
+		ubAIConfigSync = TRUE;
+		UI_SendAIConfigTo1126();
+	}
+
 	tOSD_GetOsdImgInfor(1, OSD_IMG1, OSD1IMG_SUBMENU2, 1, &tMenuOsdImgInfo);
 	tOSD_Img1(&tMenuOsdImgInfo, OSD_QUEUE);
 	if(!ubUI_TouchPanelSts)

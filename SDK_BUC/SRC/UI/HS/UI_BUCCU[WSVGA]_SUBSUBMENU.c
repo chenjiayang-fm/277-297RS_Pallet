@@ -802,6 +802,10 @@ void UI_SystemSubSubMenuExecute()
 }
 //------------------------------------------------------------------------------------
 static uint8_t ubAISetupPage = AI_PAGE_ALGORITHM;
+// 弹窗期间仅记录待选项，选否/返回不修改任何通道配置。
+static uint8_t ubAIConfirm = FALSE;
+static uint8_t ubAIConfirmItem = 1; // 默认选否。
+static uint8_t ubAIPendingItem = 0;
 static uint8_t ubPalletRemoteMode = REMOTE_SELECT_ITEM;
 static UI_SubMenuItem_t tAISetupMenuItem = {0, AI_BSD_ITEM_COUNT, {0, 0}};
 // 范围数组与 Pallet 页面的六行参数顺序一致，绘制、按键和触摸共用。
@@ -929,8 +933,49 @@ static void UI_AIDrawMenu(void)
 	UI_AIDrawSubSubMenuItem(TRUE);
 }
 
+static void UI_AIDrawConfirm(void)
+{
+	OSD_IMG_INFO tImg;
+	uint8_t i;
+	uint8_t ubLanguage = (tUI_CuSetting.tLanguage == LANGUAGE_FRENCH)?1:
+		(tUI_CuSetting.tLanguage == LANGUAGE_GERMAN)?2:(tUI_CuSetting.tLanguage == LANGUAGE_CHINESE)?3:0;
+	uint16_t uwYes = (tUI_CuSetting.tLanguage == LANGUAGE_ENGLISH)?OSD2IMG_SDCARD_YES_NOR:
+		(tUI_CuSetting.tLanguage == LANGUAGE_GERMAN)?OSD2IMG_SDCARD_YES_NOR_GER:
+		(tUI_CuSetting.tLanguage == LANGUAGE_FRENCH)?OSD2IMG_SDCARD_YES_NOR_FR:OSD2IMG_SDCARD_YES_NOR_CHN;
+	tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_AI_RESTART_CONFIRM + ubLanguage, 1, &tImg);
+	tOSD_Img2(&tImg, OSD_QUEUE);
+	for(i = 0; i < 2; i++)
+	{
+		tOSD_GetOsdImgInfor(1, OSD_IMG2, uwYes + 2*i + (ubAIConfirmItem == i), 1, &tImg);
+		tOSD_Img2(&tImg, OSD_QUEUE);
+	}
+	OSD_UpdateQueueBuf();
+}
+
+static void UI_AIConfirmExecute(void)
+{
+	uint8_t i, CamIdx = ubAIPendingItem%CAM_4T;
+	uint8_t ubAlgorithm = ubAIPendingItem/CAM_4T;
+	if(ubAIConfirmItem == 0)
+	{
+		// 确认后再把原栈板通道改为 BSD，四路选择合并发送。
+		if(ubAlgorithm == AI_ALGORITHM_PALLET)
+			for(i = 0; i < CAM_4T; i++)
+				tUI_CamStatus[i].ubAIAlgorithm = AI_ALGORITHM_BSD;
+		tUI_CamStatus[CamIdx].ubAIAlgorithm = ubAlgorithm;
+		UI_UpdateDevStatusInfo();
+		ubAIConfigSync = TRUE;
+		for(i = 0; i < CAM_4T; i++)
+			uwAIAlarmTimeout[i] = 0;
+		UI_SendAIConfigTo1126();
+	}
+	ubAIConfirm = FALSE;
+	UI_AIDrawMenu();
+}
+
 void UI_AIEnterMenu(void)
 {
+	ubAIConfirm = FALSE;
 	ubAISetupPage = AI_PAGE_ALGORITHM;
 	ubPalletRemoteMode = REMOTE_SELECT_ITEM;
 	SendIrCodeFlag = FALSE;
@@ -953,7 +998,16 @@ static void UI_AISetupExecute(void)
 	{
 		// BSD/Pallet 按钮只切换算法，SETUP 按钮打开当前通道的设置页。
 		if(ubMainIdx < AI_SETUP_CAM1)
-			tUI_CamStatus[CamIdx].ubAIAlgorithm = ubMainIdx/CAM_4T;
+		{
+			if(tUI_CamStatus[CamIdx].ubAIAlgorithm != ubMainIdx/CAM_4T)
+			{
+				ubAIPendingItem = ubMainIdx;
+				ubAIConfirmItem = 1;
+				ubAIConfirm = TRUE;
+				UI_AIDrawConfirm();
+				return;
+			}
+		}
 		else
 		{
 			ubAISetupPage = tUI_CamStatus[CamIdx].ubAIAlgorithm + AI_PAGE_BSD;
@@ -1274,6 +1328,22 @@ void UI_AISubSubMenuPage(UI_ArrowKey_t tArrowKey)
 	uint8_t *pValue[AI_PALLET_PARAM_COUNT] = {&pConfig->tDelayTurnOFF, &pConfig->tRateRange,
 		&pConfig->tFlowFrameInterval, &pConfig->tFlowPauseDuration, &pConfig->tFlowRunDuration,
 		&pConfig->tDectability};
+	if(ubAIConfirm)
+	{
+		if(tArrowKey == EXIT_ARROW)
+		{
+			ubAIConfirmItem = 1;
+			UI_AIConfirmExecute();
+		}
+		else if(tArrowKey == ENTER_ARROW)
+			UI_AIConfirmExecute();
+		else if(tArrowKey == LEFT_ARROW || tArrowKey == RIGHT_ARROW)
+		{
+			ubAIConfirmItem = 1 - ubAIConfirmItem;
+			UI_AIDrawConfirm();
+		}
+		return;
+	}
 	if(tArrowKey == EXIT_ARROW)
 	{
 		// 设置页退出时保存并返回 AI 主页面，主页面退出时返回上级菜单。
@@ -1282,6 +1352,12 @@ void UI_AISubSubMenuPage(UI_ArrowKey_t tArrowKey)
 		if(ubAISetupPage != AI_PAGE_ALGORITHM)
 		{
 			UI_UpdateDevStatusInfo();
+			if(ubAISetupPage == AI_PAGE_PALLET)
+			{
+				// 选择未变，1126 只更新参数并应答，不重启；丢帧可按原配置重发。
+				ubAIConfigSync = TRUE;
+				UI_SendAIConfigTo1126();
+			}
 			UI_AIEnterMenu();
 		}
 		else
@@ -3194,6 +3270,29 @@ void UI_AISubSubTouchMenuPage(TOUCH_EVENT_t *Touch_Info)
 		&pConfig->tDectability};
 	uint16_t uwX, uwY;
 	int16_t wTouchX, wTouchY;
+	if(ubAIConfirm)
+	{
+		if(Touch_Info->Gesture == TOUCH_PRESS)
+		{
+			uint16_t uwYes = (tUI_CuSetting.tLanguage == LANGUAGE_ENGLISH)?OSD2IMG_SDCARD_YES_NOR:
+				(tUI_CuSetting.tLanguage == LANGUAGE_GERMAN)?OSD2IMG_SDCARD_YES_NOR_GER:
+				(tUI_CuSetting.tLanguage == LANGUAGE_FRENCH)?OSD2IMG_SDCARD_YES_NOR_FR:OSD2IMG_SDCARD_YES_NOR_CHN;
+			for(i = 0; i < 2; i++)
+			{
+				tOSD_GetOsdImgInfor(1, OSD_IMG2, uwYes + 2*i, 1, &tOsdImgInfo);
+				if(Touch_Info->startX >= tOsdImgInfo.uwXStart && Touch_Info->startX < tOsdImgInfo.uwXStart + tOsdImgInfo.uwHSize &&
+					Touch_Info->startY >= tOsdImgInfo.uwYStart && Touch_Info->startY < tOsdImgInfo.uwYStart + tOsdImgInfo.uwVSize)
+				{
+					ubAIConfirmItem = i;
+					UI_AIDrawConfirm();
+					TIMER_Delay_ms(30);
+					UI_AIConfirmExecute();
+					return;
+				}
+			}
+		}
+		return; // 弹窗外触摸不穿透到算法按钮。
+	}
 	if(Touch_Info->Gesture == TOUCH_PRESS)
 	{
 		// 返回按钮先显示高亮，再复用按键退出逻辑完成保存和返回。
