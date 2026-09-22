@@ -821,20 +821,20 @@ static const uint8_t ubPalletStep[AI_PALLET_PARAM_COUNT] = {AI_PALLET_DELAY_TURN
 
 void UI_AIDrawSubSubMenuItem(uint8_t ubDrawBox)
 {
-	OSD_IMG_INFO tOsdImgInfo, tSlider, tRound, tWord;
+	OSD_IMG_INFO tOsdImgInfo, tSlider, tRound;
 	// 主页面索引按 BSD、Pallet、SETUP 三列分组，每列包含四个通道。
 	uint8_t ubMainIdx = tSettingSubSubMenuItem.tSettingS[AI_ITEM].tSubMenuInfo.ubItemIdx;
 	uint8_t CamIdx = ubMainIdx%CAM_4T;
 	uint8_t ubItemIdx = tAISetupMenuItem.tSubMenuInfo.ubItemIdx;
 	uint8_t i, j, ubHighlight, ubValue;
-	uint8_t ubLanguage = (tUI_CuSetting.tLanguage == LANGUAGE_FRENCH)?1:
-		(tUI_CuSetting.tLanguage == LANGUAGE_GERMAN)?2:(tUI_CuSetting.tLanguage == LANGUAGE_CHINESE)?3:0;
 	uint16_t uwImage;
 	UI_PalletConfigInfo_t *pConfig = &tUI_CamStatus[CamIdx].tPalletConfig;
 	// 滑条按页面顺序排列，Rate Range 在 Flow Frame Interval 之前。
 	uint8_t ubValues[AI_PALLET_PARAM_COUNT] = {pConfig->tDelayTurnOFF, pConfig->tRateRange,
 		pConfig->tFlowFrameInterval, pConfig->tFlowPauseDuration, pConfig->tFlowRunDuration,
 		pConfig->tDectability};
+	uint8_t ubPalletSwitchValues[AI_PALLET_SWITCH_COUNT] = {tUI_CamStatus[CamIdx].ubDetectPalletFlag,
+		tUI_CuSetting.ubBSDTriggerOut[CamIdx], tUI_CuSetting.ubIsEnableBSDALARM[CamIdx]};
 	uint8_t ubBSDValues[AI_BSD_SWITCH_COUNT] = {tUI_CuSetting.ubDetectPeopleFlag[CamIdx],
 		tUI_CuSetting.ubDetectCarFlag[CamIdx], tUI_CuSetting.ubIsEnableBSDALARM[CamIdx],
 		tUI_CuSetting.ubBSDTriggerOut[CamIdx]};
@@ -873,23 +873,17 @@ void UI_AIDrawSubSubMenuItem(uint8_t ubDrawBox)
 	{
 		for(i = 0;i < AI_PALLET_PARAM_COUNT;i++)
 		{
-			// 复用 486x56 的不透明框，只标记右侧滑条，文字不进入选中框。
-			tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_SYSTEM_DIMMER_GREEN_HL, 1, &tOsdImgInfo);
+			// Short slider frame; keep the labels outside the redraw area.
+			tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_AI_PALLET_SLIDER_GREEN_HL, 1, &tOsdImgInfo);
 			tOsdImgInfo.uwXStart = AI_PALLET_HL_X;
 			tOsdImgInfo.uwYStart = AI_PALLET_HL_Y + AI_PALLET_Y_STEP*i;
 			OSD_EraserImg2_NoUpdate(&tOsdImgInfo);
-			tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_SYSTEM_DIMMER_SLIDER, 1, &tSlider);
+			tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_AI_PALLET_SLIDER, 1, &tSlider);
 			tSlider.uwXStart = AI_PALLET_SLIDER_X;
 			tSlider.uwYStart = AI_PALLET_SLIDER_Y + AI_PALLET_Y_STEP*i;
-			// 六行文字和滑条使用相同行距，横坐标直接使用对应语言图片的配置。
-			tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_AI_PALLET_SETUP + ubLanguage, 1, &tWord);
-			tWord.ulAddrSft += tWord.uwHSize*AI_PALLET_Y_STEP*i;
-			tWord.uwVSize = tSlider.uwVSize;
-			tWord.uwYStart = tSlider.uwYStart;
-			tOSD_Img2(&tWord, OSD_QUEUE);
 			if(ubDrawBox && ubItemIdx == i)
 			{
-				tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_SYSTEM_DIMMER_GREEN_HL + ubPalletRemoteMode, 1, &tOsdImgInfo);
+				tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_AI_PALLET_SLIDER_GREEN_HL + ubPalletRemoteMode, 1, &tOsdImgInfo);
 				tOsdImgInfo.uwXStart = AI_PALLET_HL_X;
 				tOsdImgInfo.uwYStart = AI_PALLET_HL_Y + AI_PALLET_Y_STEP*i;
 				tOSD_Img2(&tOsdImgInfo, OSD_QUEUE);
@@ -904,6 +898,14 @@ void UI_AIDrawSubSubMenuItem(uint8_t ubDrawBox)
 			tOSD_Img2(&tRound, OSD_QUEUE);
 			UI_ShowButtonValueHighLight(ubValue, tRound.uwXStart + ((ubValue < 10)?14:4),
 				tRound.uwYStart + 9, OSD_QUEUE);
+		}
+		for(i = 0;i < AI_PALLET_SWITCH_COUNT;i++)
+		{
+			uwImage = OSD2IMG_AI_OFF_NOR + 2*ubPalletSwitchValues[i];
+			tOSD_GetOsdImgInfor(1, OSD_IMG2, uwImage + (ubDrawBox && ubItemIdx == AI_PALLET_PARAM_COUNT + i), 1, &tOsdImgInfo);
+			tOsdImgInfo.uwXStart = AI_PALLET_SWITCH_X;
+			tOsdImgInfo.uwYStart = AI_PALLET_SWITCH_Y + AI_PALLET_Y_STEP*i;
+			tOSD_Img2(&tOsdImgInfo, OSD_QUEUE);
 		}
 	}
 	OSD_UpdateQueueBuf();
@@ -925,6 +927,11 @@ static void UI_AIDrawMenu(void)
 	else if(ubAISetupPage == AI_PAGE_BSD)
 	{
 		tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_AI_BSD_SETUP + ubLanguage, 1, &tOsdImgInfo);
+		tOSD_Img2(&tOsdImgInfo, OSD_QUEUE);
+	}
+	else
+	{
+		tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_AI_PALLET_SETUP + ubLanguage, 1, &tOsdImgInfo);
 		tOSD_Img2(&tOsdImgInfo, OSD_QUEUE);
 	}
 	tOSD_GetOsdImgInfor(1, OSD_IMG2, ubUI_TouchPanelSts?OSD2IMG_RETURN_NOR:OSD2IMG_RETURN_BLACK, 1, &tOsdImgInfo);
@@ -1033,11 +1040,30 @@ static void UI_AISetupExecute(void)
 				return;
 		}
 	}
-	else
+	else if(ubItemIdx < AI_PALLET_PARAM_COUNT)
 	{
 		// 六个滑条统一使用确认键切换选择/调整模式，调整时允许左右键连发。
 		ubPalletRemoteMode = 1 - ubPalletRemoteMode;
 		SendIrCodeFlag = ubPalletRemoteMode;
+	}
+	else
+	{
+		ubPalletRemoteMode = REMOTE_SELECT_ITEM;
+		SendIrCodeFlag = FALSE;
+		switch(ubItemIdx)
+		{
+			case AI_PALLET_DETECTION:
+				tUI_CamStatus[CamIdx].ubDetectPalletFlag = 1 - tUI_CamStatus[CamIdx].ubDetectPalletFlag;
+				if(!tUI_CamStatus[CamIdx].ubDetectPalletFlag)
+				{
+					uwAIAlarmTimeout[CamIdx] = 0;
+					uwAILampTimeout[CamIdx] = 0;
+					osSignalSet(osUI_AILampThreadId, UI_AI_LAMP_SIGNAL);
+				}
+				break;
+			case AI_PALLET_TRIGGER_OUT: tUI_CuSetting.ubBSDTriggerOut[CamIdx] = 1 - tUI_CuSetting.ubBSDTriggerOut[CamIdx]; break;
+			case AI_PALLET_ALARM_SOUND: tUI_CuSetting.ubIsEnableBSDALARM[CamIdx] = 1 - tUI_CuSetting.ubIsEnableBSDALARM[CamIdx]; break;
+		}
 	}
 	UI_AIDrawSubSubMenuItem(TRUE);
 }
@@ -1365,7 +1391,7 @@ void UI_AISubSubMenuPage(UI_ArrowKey_t tArrowKey)
 		return;
 	}
 	// 调整模式下按当前行的步长加减，到达上下限停止，确认键结束调整。
-	if(ubAISetupPage == AI_PAGE_PALLET && ubPalletRemoteMode != REMOTE_SELECT_ITEM)
+	if(ubAISetupPage == AI_PAGE_PALLET && ubItemIdx < AI_PALLET_PARAM_COUNT && ubPalletRemoteMode != REMOTE_SELECT_ITEM)
 	{
 		if(tArrowKey == LEFT_ARROW && *pValue[ubItemIdx] > ubPalletMin[ubItemIdx])
 			*pValue[ubItemIdx] -= ubPalletStep[ubItemIdx];
@@ -3263,6 +3289,7 @@ void UI_AISubSubTouchMenuPage(TOUCH_EVENT_t *Touch_Info)
 {
 	OSD_IMG_INFO tOsdImgInfo, tRound;
 	uint8_t i, j, ubValue;
+	static uint8_t ubTouchPressDownCount = 0;
 	uint8_t CamIdx = tSettingSubSubMenuItem.tSettingS[AI_ITEM].tSubMenuInfo.ubItemIdx%CAM_4T;
 	UI_PalletConfigInfo_t *pConfig = &tUI_CamStatus[CamIdx].tPalletConfig;
 	uint8_t *pValue[AI_PALLET_PARAM_COUNT] = {&pConfig->tDelayTurnOFF, &pConfig->tRateRange,
@@ -3340,14 +3367,33 @@ void UI_AISubSubTouchMenuPage(TOUCH_EVENT_t *Touch_Info)
 				}
 			}
 		}
+		else if(ubAISetupPage == AI_PAGE_PALLET)
+		{
+			tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_AI_OFF_NOR, 1, &tOsdImgInfo);
+			for(i = 0;i < AI_PALLET_SWITCH_COUNT;i++)
+			{
+				uwY = AI_PALLET_SWITCH_Y + AI_PALLET_Y_STEP*i;
+				if(Touch_Info->startX >= AI_PALLET_SWITCH_X && Touch_Info->startX < AI_PALLET_SWITCH_X + tOsdImgInfo.uwHSize
+					&& Touch_Info->startY >= uwY && Touch_Info->startY < uwY + tOsdImgInfo.uwVSize)
+				{
+					tAISetupMenuItem.tSubMenuInfo.ubItemIdx = AI_PALLET_PARAM_COUNT + i;
+					UI_AISetupExecute();
+					return;
+				}
+			}
+		}
 	}
-	// 六行滑条均支持点击和拖动，拖动时使用最新触点坐标。
-	if(ubAISetupPage == AI_PAGE_PALLET && (Touch_Info->Gesture == TOUCH_PRESS || Touch_Info->Gesture == TOUCH_PRESSDOWN))
+	// Match Camera: only long press selects and changes a slider.
+	if(ubAISetupPage == AI_PAGE_PALLET && Touch_Info->Gesture == TOUCH_PRESSDOWN)
 	{
-		tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_SYSTEM_DIMMER_SLIDER, 1, &tOsdImgInfo);
+		if(++ubTouchPressDownCount == 0xff)
+			ubTouchPressDownCount = 0;
+		if(ubTouchPressDownCount%3 != 0)
+			return;
+		tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_AI_PALLET_SLIDER, 1, &tOsdImgInfo);
 		tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_SYSTEM_DIMMER_ROUND_HL, 1, &tRound);
-		wTouchX = (Touch_Info->Gesture == TOUCH_PRESS)?Touch_Info->startX:Touch_Info->endX;
-		wTouchY = (Touch_Info->Gesture == TOUCH_PRESS)?Touch_Info->startY:Touch_Info->endY;
+		wTouchX = Touch_Info->endX;
+		wTouchY = Touch_Info->endY;
 		for(i = 0;i < AI_PALLET_PARAM_COUNT;i++)
 		{
 			uwY = AI_PALLET_SLIDER_Y + AI_PALLET_Y_STEP*i;

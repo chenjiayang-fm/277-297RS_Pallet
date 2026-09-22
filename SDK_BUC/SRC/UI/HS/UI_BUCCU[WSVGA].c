@@ -1360,44 +1360,19 @@ void UI_DrawNoSignalIcon(void)
 		else
 		{
 			ubCamDiscCount[tCamViewSel.tCamViewPool[ubCam]] = 0;
-			if(tCamViewSel.tCamViewType == SINGLE_VIEW)
+			if(tCamViewSel.tCamViewType == SINGLE_VIEW &&
+				tUI_CamStatus[tCamViewSel.tCamViewPool[0]].ubAIAlgorithm != AI_ALGORITHM_PALLET &&
+				tUI_CuSetting.tParkingLineEnable[tCamViewSel.tCamViewPool[0]] == PARKING_LINE_ON &&
+				tUI_CuSetting.ubIsEnableBSDRANGE[tCamViewSel.tCamViewPool[0]] == 0 &&
+				tUI_CuSetting.ubDetectPeopleFlag[tCamViewSel.tCamViewPool[0]] == 0 &&
+				tUI_CuSetting.ubDetectCarFlag[tCamViewSel.tCamViewPool[0]] == 0)
 			{
-				if((tUI_CuSetting.GuideLineEnable[tCamViewSel.tCamViewPool[0]] || tUI_CuSetting.tParkingLineEnable[tCamViewSel.tCamViewPool[0]] == PARKING_LINE_ON) && tUI_CuSetting.ubIsEnableBSDRANGE[tCamViewSel.tCamViewPool[0]] == 0 && \
-					tUI_CuSetting.ubDetectPeopleFlag[tCamViewSel.tCamViewPool[0]] == 0 && tUI_CuSetting.ubDetectCarFlag[tCamViewSel.tCamViewPool[0]] == 0)//��������
-				{
-					
-					if(tUI_CuSetting.tParkingLineEnable[tCamViewSel.tCamViewPool[0]] == PARKING_LINE_ON)
-					{
-						UI_DrawParkingLine(tCamViewSel.tCamViewPool[0],OSD_UPDATE);
-					}
-					if(tUI_CuSetting.GuideLineEnable[tCamViewSel.tCamViewPool[0]])
-					{
-						//if(tUI_CuSetting.ubIsShowBSDBox == 0 || tUI_CuSetting.ubIsEnableBSD == 0 ||((tUI_CuSetting.ubDetectCarFlag==0) && (tUI_CuSetting.ubDetectPeopleFlag==0) ))
-						{	
-							OSD_EraserImg2_NoUpdate(&tOsdImgInfo);
-							tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_GUIDELINE_SIZE1 + tUI_CuSetting.GuideLineSize[tCamViewSel.tCamViewPool[0]], 1, &tOsdImgInfo);
-							tOsdImgInfo.uwXStart = (tUI_CuSetting.GuideLine_XY[tCamViewSel.tCamViewPool[0]][0] << 8) + tUI_CuSetting.GuideLine_XY[tCamViewSel.tCamViewPool[0]][1];
-							tOsdImgInfo.uwYStart = (tUI_CuSetting.GuideLine_XY[tCamViewSel.tCamViewPool[0]][2] << 8) + tUI_CuSetting.GuideLine_XY[tCamViewSel.tCamViewPool[0]][3];
-							tOSD_Img2(&tOsdImgInfo, OSD_UPDATE);
-						}
-					}
-				}
-				else
-				{
-					if (isDrawNosignal[ubCam] == 1)
-					{
-						OSD_EraserImg2(&tOsdImgInfo);
-						isDrawNosignal[ubCam] = 0;
-					}
-				}
+				UI_DrawParkingLine(tCamViewSel.tCamViewPool[0],OSD_UPDATE);
 			}
-			else
+			else if(isDrawNosignal[ubCam] == 1)
 			{
-				if (isDrawNosignal[ubCam] == 1)
-				{
-					OSD_EraserImg2(&tOsdImgInfo);
-					isDrawNosignal[ubCam] = 0;
-				}
+				OSD_EraserImg2(&tOsdImgInfo);
+				isDrawNosignal[ubCam] = 0;
 			}
 		}
 	}
@@ -2031,18 +2006,21 @@ void UI_DrawBSDRange(void)
 	uint16_t uwLcd_HSize = uwLCD_GetLcdHoSize();
 	uint16_t uwLcd_VSize = uwLCD_GetLcdVoSize();
 	uint8_t ubIsShow = 0;
+	uint8_t ubCam, ubCamNum, ubChannel;
 	UI_ParkinglinePoint_t tBSDlinePoint = {0};
 	MenuOnFlag = TRUE;
 	switch(tCamViewSel.tCamViewType)
 	{
 		case SINGLE_VIEW:
-			if(tUI_CuSetting.ubIsEnableBSDRANGE[tCamViewSel.tCamViewPool[0]] == TRUE)
+			if(tUI_CamStatus[tCamViewSel.tCamViewPool[0]].ubAIAlgorithm != AI_ALGORITHM_PALLET &&
+				tUI_CuSetting.ubIsEnableBSDRANGE[tCamViewSel.tCamViewPool[0]] == TRUE)
 			{
 				UI_DRAW_BSDRANGE(tUI_CuSetting.tUI_AIDetectlinePoint[tCamViewSel.tCamViewPool[0]],tUI_CuSetting.tLocation1[tCamViewSel.tCamViewPool[0]],tUI_CuSetting.tLocation2[tCamViewSel.tCamViewPool[0]],OSD_UPDATE,OSD_IMG1);	
 			}
 			else
 			{
-				if(tUI_CuSetting.tParkingLineEnable[tCamViewSel.tCamViewPool[0]] == TRUE)
+				if(tUI_CamStatus[tCamViewSel.tCamViewPool[0]].ubAIAlgorithm != AI_ALGORITHM_PALLET &&
+					tUI_CuSetting.tParkingLineEnable[tCamViewSel.tCamViewPool[0]] == TRUE)
 				{	
 					UI_DrawParkingLine_OSD1(tCamViewSel.tCamViewPool[0],OSD_UPDATE);
 				}
@@ -2055,7 +2033,8 @@ void UI_DrawBSDRange(void)
 			//旧的检测区�?
 			//UI_DrawParkingLine_OSD1_DUAL(tCamViewSel.tCamViewPool[0],OSD_UPDATE);
 			//新的检测区�?
-			if(tUI_CuSetting.ubIsEnableBSDRANGE[tCamViewSel.tCamViewPool[0]] == TRUE)
+			if(tUI_CamStatus[tCamViewSel.tCamViewPool[0]].ubAIAlgorithm != AI_ALGORITHM_PALLET &&
+				tUI_CuSetting.ubIsEnableBSDRANGE[tCamViewSel.tCamViewPool[0]] == TRUE)
 			{
 				tBSDlinePoint.tupLeft.xPoint = tUI_CuSetting.tUI_AIDetectlinePoint[tCamViewSel.tCamViewPool[0]].tupLeft.xPoint/2;
 				tBSDlinePoint.tupRight.xPoint = tUI_CuSetting.tUI_AIDetectlinePoint[tCamViewSel.tCamViewPool[0]].tupRight.xPoint/2;
@@ -2071,7 +2050,8 @@ void UI_DrawBSDRange(void)
 				ubIsShow = 1;
 
 			}
-			if(tUI_CuSetting.ubIsEnableBSDRANGE[tCamViewSel.tCamViewPool[1]] == TRUE)
+			if(tUI_CamStatus[tCamViewSel.tCamViewPool[1]].ubAIAlgorithm != AI_ALGORITHM_PALLET &&
+				tUI_CuSetting.ubIsEnableBSDRANGE[tCamViewSel.tCamViewPool[1]] == TRUE)
 			{
 				tBSDlinePoint.tupLeft.xPoint = tUI_CuSetting.tUI_AIDetectlinePoint[tCamViewSel.tCamViewPool[1]].tupLeft.xPoint/2 + 512;
 				tBSDlinePoint.tupRight.xPoint = tUI_CuSetting.tUI_AIDetectlinePoint[tCamViewSel.tCamViewPool[1]].tupRight.xPoint/2 + 512;
@@ -2117,7 +2097,8 @@ void UI_DrawBSDRange(void)
 			//UI_DrawParkingLine_OSD1_QUAL(tCamViewSel.tCamViewPool[3],OSD_UPDATE);
 //新的检测区�?
 //			//--------------------------------upper left------------------------------
-			if(tUI_CuSetting.ubIsEnableBSDRANGE[tCamViewSel.tCamViewPool[0]] == TRUE)
+			if(tUI_CamStatus[tCamViewSel.tCamViewPool[0]].ubAIAlgorithm != AI_ALGORITHM_PALLET &&
+				tUI_CuSetting.ubIsEnableBSDRANGE[tCamViewSel.tCamViewPool[0]] == TRUE)
 			{
 				tBSDlinePoint.tupLeft.xPoint = tUI_CuSetting.tUI_AIDetectlinePoint[tCamViewSel.tCamViewPool[0]].tupLeft.xPoint/2;
 				tBSDlinePoint.tupRight.xPoint = tUI_CuSetting.tUI_AIDetectlinePoint[tCamViewSel.tCamViewPool[0]].tupRight.xPoint/2;
@@ -2133,7 +2114,8 @@ void UI_DrawBSDRange(void)
 				ubIsShow = 1;
 			}
 //			//--------------------------------upper right---------------------------------
-			if(tUI_CuSetting.ubIsEnableBSDRANGE[tCamViewSel.tCamViewPool[1]] == TRUE)
+			if(tUI_CamStatus[tCamViewSel.tCamViewPool[1]].ubAIAlgorithm != AI_ALGORITHM_PALLET &&
+				tUI_CuSetting.ubIsEnableBSDRANGE[tCamViewSel.tCamViewPool[1]] == TRUE)
 			{
 				tBSDlinePoint.tupLeft.xPoint = tUI_CuSetting.tUI_AIDetectlinePoint[tCamViewSel.tCamViewPool[1]].tupLeft.xPoint/2 + 512;
 				tBSDlinePoint.tupRight.xPoint = tUI_CuSetting.tUI_AIDetectlinePoint[tCamViewSel.tCamViewPool[1]].tupRight.xPoint/2 + 512;
@@ -2150,7 +2132,8 @@ void UI_DrawBSDRange(void)
 			}
 
 //			//--------------------------------lower left------------------------------------
-				if(tUI_CuSetting.ubIsEnableBSDRANGE[tCamViewSel.tCamViewPool[2]] == TRUE)
+				if(tUI_CamStatus[tCamViewSel.tCamViewPool[2]].ubAIAlgorithm != AI_ALGORITHM_PALLET &&
+					tUI_CuSetting.ubIsEnableBSDRANGE[tCamViewSel.tCamViewPool[2]] == TRUE)
 				{
 					tBSDlinePoint.tupLeft.xPoint = tUI_CuSetting.tUI_AIDetectlinePoint[tCamViewSel.tCamViewPool[2]].tupLeft.xPoint/2;
 					tBSDlinePoint.tupRight.xPoint = tUI_CuSetting.tUI_AIDetectlinePoint[tCamViewSel.tCamViewPool[2]].tupRight.xPoint/2;
@@ -2166,7 +2149,8 @@ void UI_DrawBSDRange(void)
 					ubIsShow = 1;
 				}
 //			//--------------------------------lower right-------------------------------------
-				if(tUI_CuSetting.ubIsEnableBSDRANGE[tCamViewSel.tCamViewPool[3]] == TRUE)
+				if(tUI_CamStatus[tCamViewSel.tCamViewPool[3]].ubAIAlgorithm != AI_ALGORITHM_PALLET &&
+					tUI_CuSetting.ubIsEnableBSDRANGE[tCamViewSel.tCamViewPool[3]] == TRUE)
 				{
 					tBSDlinePoint.tupLeft.xPoint = tUI_CuSetting.tUI_AIDetectlinePoint[tCamViewSel.tCamViewPool[3]].tupLeft.xPoint/2 + 512;
 					tBSDlinePoint.tupRight.xPoint = tUI_CuSetting.tUI_AIDetectlinePoint[tCamViewSel.tCamViewPool[3]].tupRight.xPoint/2 + 512;
@@ -2193,6 +2177,30 @@ void UI_DrawBSDRange(void)
 			break;
 		default:
 			break;
+	}
+	// Both Pallet and BSD follow the guideline switch for the displayed channel.
+	ubCamNum = (tCamViewSel.tCamViewType == SINGLE_VIEW)?1:
+		(tCamViewSel.tCamViewType == DUAL_VIEW)?2:(tCamViewSel.tCamViewType == QUAD_VIEW)?4:0;
+	for(ubCam = 0; ubCam < ubCamNum; ubCam++)
+	{
+		ubChannel = tCamViewSel.tCamViewPool[ubCam];
+		if(!tUI_CuSetting.GuideLineEnable[ubChannel])
+			continue;
+		tOSD_GetOsdImgInfor(1, OSD_IMG2, OSD2IMG_GUIDELINE_SIZE1 + tUI_CuSetting.GuideLineSize[ubChannel], 1, &tOsdImgInfo);
+		tOsdImgInfo.uwXStart = (tUI_CuSetting.GuideLine_XY[ubChannel][0] << 8) + tUI_CuSetting.GuideLine_XY[ubChannel][1];
+		tOsdImgInfo.uwYStart = (tUI_CuSetting.GuideLine_XY[ubChannel][2] << 8) + tUI_CuSetting.GuideLine_XY[ubChannel][3];
+		// The source bitmap is a solid red line, so its dimensions can be reduced directly.
+		if(tCamViewSel.tCamViewType != SINGLE_VIEW)
+		{
+			tOsdImgInfo.uwXStart = tOsdImgInfo.uwXStart/2 + (ubCam%2)*uwLcd_HSize/2;
+			tOsdImgInfo.uwHSize /= 2;
+		}
+		if(tCamViewSel.tCamViewType == QUAD_VIEW)
+		{
+			tOsdImgInfo.uwYStart = tOsdImgInfo.uwYStart/2 + (ubCam/2)*uwLcd_VSize/2;
+			tOsdImgInfo.uwVSize /= 2;
+		}
+		tOSD_Img1(&tOsdImgInfo, OSD_UPDATE);
 	}
 	MenuOnFlag = FALSE;
 }
@@ -2784,6 +2792,7 @@ void UI_EventClearBox(uint32_t ClearBOX_chn)
 void UI_EventDrawBox(Algo_Result showBox)
 {
 	OSD_IMG_INFO tArea, tBox;
+	uint16_t uwCenterY;
 	static uint8_t LoadJpegFlag = 0;
 	static OSD_IMG_INFO tPD_OsdImagInfo[2],tCD_OsdImagInfo[2],tPallet_OsdImagInfo[2];
 
@@ -2813,11 +2822,20 @@ void UI_EventDrawBox(Algo_Result showBox)
 			// 跳过串口中的反向坐标，正常小目标仍会扩大后显示。
 			if(showBox.pos[i].x2 < showBox.pos[i].x1 || showBox.pos[i].y2 < showBox.pos[i].y1)
 				continue;
+			uwCenterY = (showBox.pos[i].y1 + showBox.pos[i].y2)/2;
 			UI_FitAIBoxToSafeArea(&showBox.pos[i], &tArea);
 			tBox.uwXStart = showBox.pos[i].x1;
 			tBox.uwYStart = showBox.pos[i].y1;
 			tBox.uwHSize = showBox.pos[i].x2 - showBox.pos[i].x1 + 1;
 			tBox.uwVSize = showBox.pos[i].y2 - showBox.pos[i].y1 + 1;
+			if(tUI_CamStatus[showBox.chn].ubAIAlgorithm == AI_ALGORITHM_PALLET)
+			{
+				// 使用显示框扩边、平移前的中心位置绘制栈板横线。
+				tBox.uwYStart = (uwCenterY < tArea.uwYStart + 2)?tArea.uwYStart:uwCenterY - 2;
+				tBox.uwVSize = 4;
+				if(tBox.uwYStart + tBox.uwVSize > tArea.uwYStart + tArea.uwVSize)
+					tBox.uwYStart = tArea.uwYStart + tArea.uwVSize - tBox.uwVSize;
+			}
 			tOSD_Img2_DrawBox(&tBox, showBox.pos[i].alarm_type, OSD_QUEUE);
 		}
 	}
@@ -3072,9 +3090,9 @@ static void UI_UpdateAIAlarm(void)
 	for(i = 0; i < CAM_4T; i++)
 	{
 		if(uwAIAlarmTimeout[i] && tUI_CamStatus[i].tCamConnSts == CAM_ONLINE &&
-			(tUI_CamStatus[i].ubAIAlgorithm == AI_ALGORITHM_PALLET ||
-			(tUI_CuSetting.ubIsEnableBSDALARM[i] &&
-			(tUI_CuSetting.ubDetectPeopleFlag[i] || tUI_CuSetting.ubDetectCarFlag[i]))) &&
+			tUI_CuSetting.ubIsEnableBSDALARM[i] &&
+			((tUI_CamStatus[i].ubAIAlgorithm == AI_ALGORITHM_PALLET)?tUI_CamStatus[i].ubDetectPalletFlag:
+			(tUI_CuSetting.ubDetectPeopleFlag[i] || tUI_CuSetting.ubDetectCarFlag[i])) &&
 			ubAIAlarmLevel[i] > ubLevel)
 			ubLevel = ubAIAlarmLevel[i];
 	}
@@ -3082,8 +3100,7 @@ static void UI_UpdateAIAlarm(void)
 		ubLevel = 0;
 	if(ubLevel == 0)
 	{
-		if(Playwav_Flag)
-			ADO_WavStop();
+		// Match FlowAnalyzer: finish the current clip and stop scheduling.
 		Playwav_Flag = 0;
 		return;
 	}
@@ -3112,7 +3129,7 @@ void UI_UpdateAILamp(void)
 	for(i = 0; i < CAM_4T; i++)
 	{
 		// 切回 BSD、待机或算法重新同步时，撤销该路临时开灯请求。
-		if(tUI_CamStatus[i].ubAIAlgorithm != AI_ALGORITHM_PALLET ||
+		if(tUI_CamStatus[i].ubAIAlgorithm != AI_ALGORITHM_PALLET || !tUI_CamStatus[i].ubDetectPalletFlag ||
 			tUI_CamStatus[i].tCamConnSts != CAM_ONLINE || ubAIConfigSync ||
 			ubUI_CuPowerDiscFlag || ubUI_CuStandbyFlag || KNL_UsbdFwuFg)
 			uwAILampTimeout[i] = 0;
@@ -4512,6 +4529,7 @@ UI_Result_t UI_SendLaserorLedToCAM(osThreadId thread_id, UI_CUReqCmd_t *ptReqCmd
 	osMutexWait(osUI_CamCmdMutex, osWaitForever);
 	if(thread_id == osUI_AILampThreadId)
 	{
+		uint8_t ubCalibrate;
 		pubLampState = (Opc == TWC_Laser_CTRL)?&ubAILaserState[tCamNum]:&ubAILedState[tCamNum];
 		// 等锁期间菜单可能已改为常开，此时让手动设置接管，不能发送自动关灯。
 		if((Opc == TWC_Laser_CTRL && tUI_CamStatus[tCamNum].tCamLaser == CAMLASER_ENABLE) ||
@@ -4528,9 +4546,14 @@ UI_Result_t UI_SendLaserorLedToCAM(osThreadId thread_id, UI_CUReqCmd_t *ptReqCmd
 			return rUI_FAIL;
 		}
 		// 等锁后再读倒计时与算法选择，避免发出已过期或旧通道的开灯命令。
-		ptReqCmd->ubCmd[UI_SETTING_DATA+1] = uwAILampTimeout[tCamNum] &&
-			tUI_CamStatus[tCamNum].ubAIAlgorithm == AI_ALGORITHM_PALLET &&
-			!ubAIConfigSync && !ubUI_CuPowerDiscFlag && !ubUI_CuStandbyFlag && !KNL_UsbdFwuFg;
+		// Calibration keeps the lights on until the page is closed.
+		ubCalibrate = MenuOnFlag && tUI_State == UI_SUBSUBSUBMENU_STATE &&
+			tUI_MenuItem.ubItemIdx == SETTING_ITEM &&
+			tUI_SubMenuItem[SETTING_ITEM].tSubMenuInfo.ubItemIdx == GUIDELINE_ITEM &&
+			tSettingSubSubMenuItem.tSettingS[GUIDELINE_ITEM].tSubMenuInfo.ubItemIdx/2 == tCamNum;
+		ptReqCmd->ubCmd[UI_SETTING_DATA+1] = (ubCalibrate || (uwAILampTimeout[tCamNum] &&
+			tUI_CamStatus[tCamNum].ubAIAlgorithm == AI_ALGORITHM_PALLET && tUI_CamStatus[tCamNum].ubDetectPalletFlag &&
+			!ubAIConfigSync)) && !ubUI_CuPowerDiscFlag && !ubUI_CuStandbyFlag && !KNL_UsbdFwuFg;
 		if(*pubLampState == ptReqCmd->ubCmd[UI_SETTING_DATA+1])
 		{
 			osMutexRelease(osUI_CamCmdMutex);
@@ -4729,6 +4752,7 @@ void UI_ResetUIParameter(void)
 		tUI_CamStatus[tCamNum].tPalletConfig.tFlowPauseDuration = 3;
 		tUI_CamStatus[tCamNum].tPalletConfig.tFlowRunDuration = 1;
 		tUI_CamStatus[tCamNum].tPalletConfig.tDectability = 52;
+		tUI_CamStatus[tCamNum].ubDetectPalletFlag = TRUE;
 		tUI_CamStatus[tCamNum].ubAIConfigVersion = UI_AI_CONFIG_VERSION;
 		
 		tUI_CuSetting.ubUpdateTxParam[tCamNum] = FALSE;
@@ -4950,7 +4974,18 @@ uint8_t UI_CheckUIParameter(void)
 
 		UI_CHK_MYSYS(tUI_CuSetting.ubUpdateTxParam[tCamNum],TRUE + 1,FALSE);
 
-		/* These eight bytes used to be reserved; keep the saved camera layout unchanged. */
+		/* Keep version 1 settings; the new detection switch defaults to ON. */
+		if(tUI_CamStatus[tCamNum].ubAIConfigVersion == 1)
+		{
+			tUI_CamStatus[tCamNum].ubDetectPalletFlag = TRUE;
+			tUI_CamStatus[tCamNum].ubAIConfigVersion = UI_AI_CONFIG_VERSION;
+			ubAIConfigUpdate = TRUE;
+		}
+		if(tUI_CamStatus[tCamNum].ubDetectPalletFlag > 1)
+		{
+			tUI_CamStatus[tCamNum].ubDetectPalletFlag = TRUE;
+			ubAIConfigUpdate = TRUE;
+		}
 		UI_PalletConfigInfo_t *pConfig = &tUI_CamStatus[tCamNum].tPalletConfig;
 		if(tUI_CamStatus[tCamNum].ubAIConfigVersion != UI_AI_CONFIG_VERSION ||
 			tUI_CamStatus[tCamNum].ubAIAlgorithm >= AI_ALGORITHM_COUNT ||
@@ -4967,6 +5002,7 @@ uint8_t UI_CheckUIParameter(void)
 			tUI_CamStatus[tCamNum].tPalletConfig.tFlowPauseDuration = 3;
 			tUI_CamStatus[tCamNum].tPalletConfig.tFlowRunDuration = 1;
 			tUI_CamStatus[tCamNum].tPalletConfig.tDectability = 52;
+			tUI_CamStatus[tCamNum].ubDetectPalletFlag = TRUE;
 			tUI_CamStatus[tCamNum].ubAIConfigVersion = UI_AI_CONFIG_VERSION;
 			ubAIConfigUpdate = TRUE;
 		}
@@ -6045,7 +6081,8 @@ void UI_TriggerEventExec(void *pvTriggerEvent)
 	//�������?
 	if(TriggerLock && tUI_ViewSel <= CAM4)
 	{
-		if(tUI_CuSetting.tParkingLineEnable[tUI_ViewSel] == PARKING_LINE_AUTO && tUI_CuSetting.ubIsEnableBSDRANGE[tUI_ViewSel] == 0)
+		if(tUI_CamStatus[tUI_ViewSel].ubAIAlgorithm != AI_ALGORITHM_PALLET &&
+			tUI_CuSetting.tParkingLineEnable[tUI_ViewSel] == PARKING_LINE_AUTO && tUI_CuSetting.ubIsEnableBSDRANGE[tUI_ViewSel] == 0)
 		{
 //			tOSD_GetOsdImgInfor(1, OSD_IMG1, OSD1IMG_BSD_RANGE_SINGLE, 1, &tOsdImgInfo);
 //			tOSD_Img1(&tOsdImgInfo, OSD_UPDATE);	

@@ -139,13 +139,21 @@ void handleUart4ai(char data[], int length)
 	// CRC 已由接收状态机校验。零目标帧也可能要求开灯，不能依赖目标数量。
 	// 只刷新有效 Pallet 通道；bit4 清零时不续时，沿用旧工程的延时关灯行为。
 	if(tUI_CamStatus[targetChn].ubAIAlgorithm == AI_ALGORITHM_PALLET &&
-		!ubAIConfigSync && ((uint8_t)data[1] & 0x10))
+		tUI_CamStatus[targetChn].ubDetectPalletFlag && !ubAIConfigSync && ((uint8_t)data[1] & 0x10))
 	{
 		uint8_t ubWakeLamp = (uwAILampTimeout[targetChn] == 0);
 		uwAILampTimeout[targetChn] = AI_LAMP_HOLD_TIME;
 		// 首次开灯或超时后重新开灯才唤醒；连续开灯帧只续时，避免逐帧唤醒。
 		if(ubWakeLamp)
 			osSignalSet(osUI_AILampThreadId, UI_AI_LAMP_SIGNAL);
+	}
+	if(tUI_CamStatus[targetChn].ubAIAlgorithm == AI_ALGORITHM_PALLET &&
+		!tUI_CamStatus[targetChn].ubDetectPalletFlag)
+	{
+		targetNum = 0;
+		targetP_OR_C = 0;
+		ubLevel = 0;
+		uwAILampTimeout[targetChn] = 0;
 	}
 	ubAIAlarmLevel[targetChn] = ubLevel;
 	uwAIAlarmTimeout[targetChn] = ubLevel ? 1000 : 0;

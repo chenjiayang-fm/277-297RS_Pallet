@@ -26039,7 +26039,9 @@ KNL_UsbdUvcRet_t tKNL_UpdateBsUvcImage(uint32_t ulVdoAddr, uint32_t ulVdoSize)
 	//	printf("KNL_H264SEIInfo[8] is %d\n",KNL_H264SEIInfo[8]);
 #if 1
 	//检人车
-		if(tUI_CuSetting.ubDetectCarFlag[ubSrcNum] == 0 && tUI_CuSetting.ubDetectPeopleFlag[ubSrcNum] == 0)
+		if(tUI_CamStatus[ubSrcNum].ubAIAlgorithm == AI_ALGORITHM_PALLET)
+			KNL_H264SEIInfo[KNL_UVC_SEI_DET_CAR_PERSON] = tUI_CamStatus[ubSrcNum].ubDetectPalletFlag?3:0;
+		else if(tUI_CuSetting.ubDetectCarFlag[ubSrcNum] == 0 && tUI_CuSetting.ubDetectPeopleFlag[ubSrcNum] == 0)
 			KNL_H264SEIInfo[KNL_UVC_SEI_DET_CAR_PERSON] = 0;//关闭算法
 		else if(tUI_CuSetting.ubDetectCarFlag[ubSrcNum] == 0 && tUI_CuSetting.ubDetectPeopleFlag[ubSrcNum] == 1)
 			KNL_H264SEIInfo[KNL_UVC_SEI_DET_CAR_PERSON] = 1;//检测人

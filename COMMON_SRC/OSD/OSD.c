@@ -1086,8 +1086,8 @@ OSD_RESULT tOSD_Img2_DrawBox(OSD_IMG_INFO *pInfor, uint8_t alarm_type, OSD_UPDAT
 	uint8_t bmp_idx = (alarm_type == 1)?green_bmp_idx:(alarm_type == 2?yellow_bmp_idx:red_bmp_idx);
 	uint16_t y;
 
-	// 坐标来自串口，先检查尺寸和边界，防止直接写像素时越界或上下边重叠。
-	if(pInfor->uwHSize < READ_RECT_LINE_WIDTH * 2 || pInfor->uwVSize < READ_RECT_LINE_WIDTH * 2 ||
+	// 坐标来自串口，检查尺寸和边界；允许 4 像素高的栈板中心横线。
+	if(pInfor->uwHSize < READ_RECT_LINE_WIDTH * 2 || pInfor->uwVSize < READ_RECT_LINE_WIDTH ||
 		pInfor->uwXStart + pInfor->uwHSize > uwOSD_HSize ||
 		pInfor->uwYStart + pInfor->uwVSize > uwOSD_VSize || alarm_type < 1 || alarm_type > 3)
 		return OSD_LOCA_FAIL;

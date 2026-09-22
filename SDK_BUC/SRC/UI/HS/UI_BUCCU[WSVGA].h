@@ -87,7 +87,11 @@ void UI_SendAIConfigTo1126(void);
 #define AI_BSD_ITEM_COUNT      (AI_BSD_SWITCH_COUNT + 1)
 #define AI_PALLET_PARAM_COUNT  6
 #define AI_PALLET_SENSITIVITY  (AI_PALLET_PARAM_COUNT - 1)
-#define AI_PALLET_ITEM_COUNT   AI_PALLET_PARAM_COUNT
+#define AI_PALLET_SWITCH_COUNT 3
+#define AI_PALLET_DETECTION    AI_PALLET_PARAM_COUNT
+#define AI_PALLET_TRIGGER_OUT  (AI_PALLET_PARAM_COUNT + 1)
+#define AI_PALLET_ALARM_SOUND  (AI_PALLET_PARAM_COUNT + 2)
+#define AI_PALLET_ITEM_COUNT   (AI_PALLET_PARAM_COUNT + AI_PALLET_SWITCH_COUNT)
 
 #define AI_PALLET_DELAY_TURN_OFF_MIN       2
 #define AI_PALLET_DELAY_TURN_OFF_MAX       10
@@ -112,15 +116,17 @@ void UI_SendAIConfigTo1126(void);
 #define AI_ALGORITHM_Y          154
 #define AI_ALGORITHM_X_STEP     137
 #define AI_ALGORITHM_Y_STEP     72
-#define AI_BSD_SWITCH_X         338
+#define AI_BSD_SWITCH_X         398
 #define AI_BSD_X_STEP           454
 #define AI_BSD_Y                140
 #define AI_BSD_Y_STEP           76
-#define AI_PALLET_HL_X          486
+#define AI_PALLET_HL_X          380
 #define AI_PALLET_HL_Y          84
 #define AI_PALLET_Y_STEP        68
-#define AI_PALLET_SLIDER_X      508
+#define AI_PALLET_SLIDER_X      402
 #define AI_PALLET_SLIDER_Y      88
+#define AI_PALLET_SWITCH_X      872
+#define AI_PALLET_SWITCH_Y      91
 
 #define AI_Config_Xpos     285
 #define AI_Config_Ypos     175
@@ -613,7 +619,7 @@ typedef struct
 	uint8_t tDectability;
 }UI_PalletConfigInfo_t;
 
-#define UI_AI_CONFIG_VERSION 1
+#define UI_AI_CONFIG_VERSION 2
 void UI_AIEnterMenu(void);
 void UI_AISetupReturn(void);
 typedef enum
@@ -1195,7 +1201,8 @@ typedef struct
 	uint8_t ubAIAlgorithm; /* 0: BSD, 1: Pallet */
 	UI_PalletConfigInfo_t tPalletConfig;
 	uint8_t ubAIConfigVersion;
-	uint8_t ubReserved[155];
+	uint8_t ubDetectPalletFlag;
+	uint8_t ubReserved[154];
 
 }UI_CamStatus_t;
 #pragma pack (1)/*指定按1字节对齐*/
